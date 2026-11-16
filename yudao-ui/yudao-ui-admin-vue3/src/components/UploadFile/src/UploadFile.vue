@@ -35,6 +35,9 @@
       <template #file="row">
         <div class="flex items-center">
           <span>{{ row.file.name }}</span>
+          <span v-if="row.file.status === 'uploading'" class="ml-10px">
+            {{ row.file.percentage || 0 }}%
+          </span>
           <div class="ml-10px">
             <el-link
               :href="row.file.url"
@@ -71,7 +74,7 @@ import { propTypes } from '@/utils/propTypes'
 import type { UploadProps, UploadRawFile, UploadUserFile } from 'element-plus'
 import { isString } from '@/utils/is'
 import { getFileNameFromUrl } from '@/utils/file'
-import { useUpload } from '@/components/UploadFile/src/useUpload'
+import { cancelUpload, useUpload } from '@/components/UploadFile/src/useUpload'
 import { UploadFile } from 'element-plus/es/components/upload/src/upload'
 
 defineOptions({ name: 'UploadFile' })
@@ -169,6 +172,7 @@ const excelUploadError: UploadProps['onError'] = (): void => {
 }
 // 删除上传文件
 const handleRemove = (file: UploadFile) => {
+  cancelUpload(file.uid)
   const index = fileList.value.findIndex((item) => item.uid === file.uid)
   if (index > -1) {
     fileList.value.splice(index, 1)

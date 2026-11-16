@@ -1,10 +1,17 @@
 import * as FileApi from '@/api/infra/file'
-import {
-  UploadRawFile,
-  UploadRequestOptions,
-  UploadProgressEvent
-} from 'element-plus/es/components/upload/src/upload'
-import axios, { AxiosProgressEvent } from 'axios'
+import { UploadRequestOptions, UploadProgressEvent } from 'element-plus/es/components/upload/src/upload'
+import axios, { AxiosProgressEvent, AxiosResponse } from 'axios'
+import { readEtag, ResumeStore, runDirectUpload, StoredUpload } from './uploadTask'
+
+const activeUploads = new Map<number, AbortController>()
+
+/** 取消仍在进行的直传，并通知后端中止任务。 */
+export const cancelUpload = (uid?: number) => {
+  if (uid == null) {
+    return
+  }
+  activeUploads.get(uid)?.abort()
+}
 
 /**
  * 获得上传 URL
@@ -27,26 +34,30 @@ export const useUpload = (directory?: string) => {
       options.onProgress?.(upEvt) // 触发 el-upload 的 on-progress
     }
 
-    // 模式一：前端上传
+    // 模式一：前端直传。对象名、确认和分片都走上传任务，浏览器不持有存储密钥。
     if (isClientUpload) {
-      // 1.1 生成文件名称
-      const fileName = options.file.name || options.filename
-      // 1.2 获取文件预签名地址
-      const presignedInfo = await FileApi.getFilePresignedUrl(fileName, directory)
-      // 1.3 上传文件（不能使用 ElUpload 的 ajaxUpload 方法的原因：其使用的是 FormData 上传，Minio 不支持）
-      return axios
-        .put(presignedInfo.uploadUrl, options.file, {
-          headers: {
-            'Content-Type': options.file.type || 'application/octet-stream'
-          },
-          onUploadProgress: uploadProgressHandler
+      const file = options.file
+      const controller = new AbortController()
+      if (file.uid != null) {
+        activeUploads.set(file.uid, controller)
+      }
+      try {
+        return await runDirectUpload({
+          file,
+          directory,
+          client: directUploadClient,
+          store: sessionResumeStore,
+          signal: controller.signal,
+          onProgress: (percent) => {
+            const upEvt = { percent } as UploadProgressEvent
+            options.onProgress?.(upEvt)
+          }
         })
-        .then(() => {
-          // 1.4. 记录文件信息到后端（异步）
-          createFile(presignedInfo, options.file, fileName)
-          // 通知成功，数据格式保持与后端上传的返回结果一致
-          return { data: presignedInfo.url }
-        })
+      } finally {
+        if (file.uid != null) {
+          activeUploads.delete(file.uid)
+        }
+      }
     } else {
       // 模式二：后端上传
       // 重写 el-upload httpRequest 文件上传成功会走成功的钩子，失败走失败的钩子
@@ -72,23 +83,72 @@ export const useUpload = (directory?: string) => {
   }
 }
 
-/**
- * 创建文件信息
- * @param vo 文件预签名信息
- * @param file 文件
- * @param fileName
- */
-function createFile(vo: FileApi.FilePresignedUrlRespVO, file: UploadRawFile, fileName: string) {
-  const fileVo = {
-    configId: vo.configId,
-    url: vo.url,
-    path: vo.path,
-    name: fileName,
-    type: file.type || 'application/octet-stream',
-    size: file.size
+const sessionResumeStore: ResumeStore = {
+  load(key) {
+    return readStored(key)
+  },
+  save(key, value) {
+    writeStored(key, value)
+  },
+  clear(key) {
+    try {
+      sessionStorage.removeItem(key)
+    } catch {
+      // 没有会话存储时忽略。
+    }
   }
-  FileApi.createFile(fileVo)
-  return fileVo
+}
+
+function readStored(key: string): StoredUpload | undefined {
+  try {
+    const text = sessionStorage.getItem(key)
+    if (!text) {
+      return undefined
+    }
+    const parsed = JSON.parse(text) as StoredUpload
+    if (!parsed || typeof parsed.taskId !== 'number' || !Array.isArray(parsed.parts)) {
+      return undefined
+    }
+    return parsed
+  } catch {
+    return undefined
+  }
+}
+
+function writeStored(key: string, value: StoredUpload) {
+  try {
+    sessionStorage.setItem(key, JSON.stringify(value))
+  } catch {
+    // 浏览器拒绝写入时仍继续本次上传，只是不能续传。
+  }
+}
+
+const directUploadClient = {
+  init: (body: { name: string; directory?: string; size: number; contentType?: string }) =>
+    FileApi.initUploadTask(body),
+  partUrls: (taskId: number, partNumbers: number[]) => FileApi.getUploadPartUrls(taskId, partNumbers),
+  getTask: (id: number) => FileApi.getUploadTask(id),
+  confirm: (id: number) => FileApi.confirmUploadTask(id),
+  complete: (taskId: number, parts: { partNumber: number; eTag: string }[]) =>
+    FileApi.completeUploadTask(taskId, parts),
+  abort: async (id: number) => {
+    await FileApi.abortUploadTask(id)
+  },
+  presignGet: (id: number) => FileApi.presignGetFile(id),
+  async put(
+    url: string,
+    body: Blob,
+    contentType: string | undefined,
+    onLoaded: (loaded: number) => void,
+    signal?: AbortSignal
+  ) {
+    const response = await axios.put(url, body, {
+      headers: contentType ? { 'Content-Type': contentType } : { 'Content-Type': undefined },
+      signal,
+      onUploadProgress: (evt: AxiosProgressEvent) => onLoaded(evt.loaded)
+    })
+    return readEtag((response as AxiosResponse).headers || {})
+  }
 }
 
 /**

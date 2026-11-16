@@ -16,6 +16,7 @@
     >
       <template v-if="modelValue">
         <img :src="modelValue" class="upload-image" />
+        <div v-if="uploading" class="upload-progress">上传中 {{ percent }}%</div>
         <div class="upload-handle" @click.stop>
           <div v-if="!disabled" class="handle-icon" @click="editImg">
             <Icon icon="ep:edit" />
@@ -34,8 +35,8 @@
       <template v-else>
         <div class="upload-empty">
           <slot name="empty">
-            <Icon icon="ep:plus" />
-            <!-- <span>请上传图片</span> -->
+            <Icon v-if="!uploading" icon="ep:plus" />
+            <span v-else>上传中 {{ percent }}%</span>
           </slot>
         </div>
       </template>
@@ -107,7 +108,24 @@ const deleteImg = () => {
   emit('update:modelValue', '')
 }
 
-const { uploadUrl, httpRequest } = useUpload(props.directory)
+const percent = ref(0)
+const uploading = ref(false)
+const { uploadUrl, httpRequest: rawHttpRequest } = useUpload(props.directory)
+const httpRequest: typeof rawHttpRequest = async (options) => {
+  uploading.value = true
+  percent.value = 0
+  try {
+    return await rawHttpRequest({
+      ...options,
+      onProgress: (evt) => {
+        percent.value = Math.round(evt.percent || 0)
+        options.onProgress?.(evt)
+      }
+    })
+  } finally {
+    uploading.value = false
+  }
+}
 
 const editImg = () => {
   const dom = document.querySelector(`#${uuid.value} .el-upload__input`)
@@ -215,6 +233,19 @@ const uploadError = () => {
         width: 100%;
         height: 100%;
         object-fit: contain;
+      }
+
+      .upload-progress {
+        position: absolute;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        z-index: 1;
+        padding: 4px 0;
+        font-size: 12px;
+        color: #fff;
+        text-align: center;
+        background: rgb(0 0 0 / 55%);
       }
 
       .upload-empty {
