@@ -1,5 +1,8 @@
 DELETE FROM "infra_config";
 DELETE FROM "infra_file_config";
+DELETE FROM "infra_file_relation";
+DELETE FROM "infra_file_operation_log";
+DELETE FROM "infra_file_upload_task";
 DELETE FROM "infra_file";
 DELETE FROM "infra_job";
 DELETE FROM "infra_job_log";

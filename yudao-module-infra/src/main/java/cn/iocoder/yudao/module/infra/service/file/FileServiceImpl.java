@@ -16,6 +16,7 @@ import cn.iocoder.yudao.module.infra.controller.admin.file.vo.file.FilePageReqVO
 import cn.iocoder.yudao.module.infra.controller.admin.file.vo.file.FilePresignedUrlRespVO;
 import cn.iocoder.yudao.module.infra.dal.dataobject.file.FileDO;
 import cn.iocoder.yudao.module.infra.dal.mysql.file.FileMapper;
+import cn.iocoder.yudao.module.infra.dal.mysql.file.FileRelationMapper;
 import cn.iocoder.yudao.module.infra.framework.file.core.client.FileClient;
 import cn.iocoder.yudao.module.infra.framework.file.core.utils.FilePathUtils;
 import cn.iocoder.yudao.module.infra.framework.file.core.utils.FileTypeUtils;
@@ -98,6 +99,8 @@ public class FileServiceImpl implements FileService {
 
     @Resource
     private FileMapper fileMapper;
+    @Resource
+    private FileRelationMapper fileRelationMapper;
 
     @Override
     public PageResult<FileDO> getFilePage(FilePageReqVO pageReqVO) {
@@ -144,7 +147,8 @@ public class FileServiceImpl implements FileService {
         // 3. 保存到数据库
         fileMapper.insert(new FileDO().setConfigId(client.getId())
                 .setName(name).setPath(path).setUrl(url)
-                .setType(type).setSize((long) content.length));
+                .setType(type).setSize((long) content.length)
+                .setStatus(FileUploadTaskStatus.FILE_NORMAL));
         return url;
     }
 
@@ -262,6 +266,7 @@ public class FileServiceImpl implements FileService {
         FileDO file = validateFileExists(id);
         // 1.2 校验路径合法性，避免误删文件存储器中的其他文件
         FilePathUtils.validatePath(file.getPath());
+        validateFileNotReferenced(id);
 
         // 2.1 从文件存储器中删除
         FileClient client = fileConfigService.getFileClient(file.getConfigId());
@@ -279,6 +284,9 @@ public class FileServiceImpl implements FileService {
         List<FileDO> files = fileMapper.selectByIds(ids);
         for (FileDO file : files) {
             FilePathUtils.validatePath(file.getPath());
+            validateFileNotReferenced(file.getId());
+        }
+        for (FileDO file : files) {
             // 获取客户端
             FileClient client = fileConfigService.getFileClient(file.getConfigId());
             Assert.notNull(client, "客户端({}) 不能为空", file.getPath());
@@ -288,6 +296,13 @@ public class FileServiceImpl implements FileService {
 
         // 删除记录
         fileMapper.deleteByIds(ids);
+    }
+
+    private void validateFileNotReferenced(Long id) {
+        Long count = fileRelationMapper.selectCountByFileId(id);
+        if (count != null && count > 0) {
+            throw exception(FILE_REFERENCED);
+        }
     }
 
     private FileDO validateFileExists(Long id) {

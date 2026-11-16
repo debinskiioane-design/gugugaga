@@ -1,5 +1,7 @@
 package cn.iocoder.yudao.module.infra.framework.file.core.client;
 
+import java.util.List;
+
 /**
  * 文件客户端
  *
@@ -71,6 +73,53 @@ public interface FileClient {
      * @return 文件预签名地址
      */
     default String presignGetUrl(String url, Integer expirationSeconds) {
+        throw new UnsupportedOperationException("不支持的操作");
+    }
+
+    /**
+     * 查询对象。不存在时返回 null。
+     */
+    default FileObjectMeta head(String path) {
+        throw new UnsupportedOperationException("不支持的操作");
+    }
+
+    /**
+     * 读取对象开头，用来识别文件头。不把整个对象拉回应用。
+     */
+    default byte[] readPrefix(String path, int maxBytes) {
+        throw new UnsupportedOperationException("不支持的操作");
+    }
+
+    /**
+     * 创建分片上传，返回 uploadId。
+     */
+    default String createMultipartUpload(String path, String contentType) {
+        throw new UnsupportedOperationException("不支持的操作");
+    }
+
+    /**
+     * 为已有 uploadId 签发单个分片的上传地址。不会新建一次分片上传。
+     */
+    default String presignUploadPart(String path, String uploadId, int partNumber) {
+        throw new UnsupportedOperationException("不支持的操作");
+    }
+
+    default List<FilePartSummary> listParts(String path, String uploadId) {
+        throw new UnsupportedOperationException("不支持的操作");
+    }
+
+    default void completeMultipartUpload(String path, String uploadId, List<FilePartSummary> parts) {
+        throw new UnsupportedOperationException("不支持的操作");
+    }
+
+    default void abortMultipartUpload(String path, String uploadId) {
+        throw new UnsupportedOperationException("不支持的操作");
+    }
+
+    /**
+     * 不带签名的访问地址。私有桶上它不能直接打开，读取时再另行签发。
+     */
+    default String stableUrl(String path) {
         throw new UnsupportedOperationException("不支持的操作");
     }
 

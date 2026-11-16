@@ -14,12 +14,31 @@ import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3Configuration;
+import software.amazon.awssdk.services.s3.model.AbortMultipartUploadRequest;
+import software.amazon.awssdk.services.s3.model.CompletedMultipartUpload;
+import software.amazon.awssdk.services.s3.model.CompletedPart;
+import software.amazon.awssdk.services.s3.model.CompleteMultipartUploadRequest;
+import software.amazon.awssdk.services.s3.model.CreateMultipartUploadRequest;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
+import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
+import software.amazon.awssdk.services.s3.model.ListPartsRequest;
+import software.amazon.awssdk.services.s3.model.ListPartsResponse;
+import software.amazon.awssdk.services.s3.model.Part;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
+import software.amazon.awssdk.services.s3.presigner.model.UploadPartPresignRequest;
+
+import cn.iocoder.yudao.module.infra.framework.file.core.client.FileObjectMeta;
+import cn.iocoder.yudao.module.infra.framework.file.core.client.FilePartSummary;
+
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 
 import java.net.URI;
 import java.net.URL;
@@ -117,6 +136,115 @@ public class S3FileClient extends AbstractFileClient<S3FileClientConfig> {
                 .key(path)
                 .build();
         return IoUtil.readBytes(client.getObject(getRequest));
+    }
+
+    @Override
+    public FileObjectMeta head(String path) {
+        try {
+            HeadObjectResponse response = client.headObject(HeadObjectRequest.builder()
+                    .bucket(config.getBucket())
+                    .key(path)
+                    .build());
+            return new FileObjectMeta(response.contentLength(), response.contentType(), response.eTag());
+        } catch (S3Exception ex) {
+            if (ex.statusCode() == 404) {
+                return null;
+            }
+            throw ex;
+        }
+    }
+
+    @Override
+    public byte[] readPrefix(String path, int maxBytes) {
+        int length = Math.max(maxBytes, 1);
+        GetObjectRequest request = GetObjectRequest.builder()
+                .bucket(config.getBucket())
+                .key(path)
+                .range("bytes=0-" + (length - 1))
+                .build();
+        try {
+            return IoUtil.readBytes(client.getObject(request));
+        } catch (S3Exception ex) {
+            if (ex.statusCode() == 404) {
+                return null;
+            }
+            throw ex;
+        }
+    }
+
+    @Override
+    public String createMultipartUpload(String path, String contentType) {
+        CreateMultipartUploadRequest request = CreateMultipartUploadRequest.builder()
+                .bucket(config.getBucket())
+                .key(path)
+                .contentType(contentType)
+                .build();
+        return client.createMultipartUpload(request).uploadId();
+    }
+
+    @Override
+    public String presignUploadPart(String path, String uploadId, int partNumber) {
+        return presigner.presignUploadPart(UploadPartPresignRequest.builder()
+                .signatureDuration(presignExpiration())
+                .uploadPartRequest(b -> b.bucket(config.getBucket())
+                        .key(path)
+                        .uploadId(uploadId)
+                        .partNumber(partNumber))
+                .build())
+                .url().toString();
+    }
+
+    @Override
+    public List<FilePartSummary> listParts(String path, String uploadId) {
+        List<FilePartSummary> parts = new ArrayList<>();
+        Integer marker = null;
+        do {
+            ListPartsRequest.Builder builder = ListPartsRequest.builder()
+                    .bucket(config.getBucket())
+                    .key(path)
+                    .uploadId(uploadId);
+            if (marker != null) {
+                builder.partNumberMarker(marker);
+            }
+            ListPartsResponse response = client.listParts(builder.build());
+            for (Part part : response.parts()) {
+                parts.add(new FilePartSummary(part.partNumber(), part.eTag(), part.size()));
+            }
+            marker = Boolean.TRUE.equals(response.isTruncated()) ? response.nextPartNumberMarker() : null;
+        } while (marker != null);
+        parts.sort(Comparator.comparing(FilePartSummary::getPartNumber));
+        return parts;
+    }
+
+    @Override
+    public void completeMultipartUpload(String path, String uploadId, List<FilePartSummary> parts) {
+        List<CompletedPart> completed = parts.stream()
+                .sorted(Comparator.comparing(FilePartSummary::getPartNumber))
+                .map(part -> CompletedPart.builder()
+                        .partNumber(part.getPartNumber())
+                        .eTag(part.getETag())
+                        .build())
+                .toList();
+        client.completeMultipartUpload(CompleteMultipartUploadRequest.builder()
+                .bucket(config.getBucket())
+                .key(path)
+                .uploadId(uploadId)
+                .multipartUpload(CompletedMultipartUpload.builder().parts(completed).build())
+                .build());
+    }
+
+    @Override
+    public String stableUrl(String path) {
+        return config.getDomain() + "/" + HttpUtils.encodeUrlPath(path);
+    }
+
+    @Override
+    public void abortMultipartUpload(String path, String uploadId) {
+        client.abortMultipartUpload(AbortMultipartUploadRequest.builder()
+                .bucket(config.getBucket())
+                .key(path)
+                .uploadId(uploadId)
+                .build());
     }
 
     @Override

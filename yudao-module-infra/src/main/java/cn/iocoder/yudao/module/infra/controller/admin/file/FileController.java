@@ -11,6 +11,7 @@ import cn.iocoder.yudao.framework.tenant.core.aop.TenantIgnore;
 import cn.iocoder.yudao.module.infra.controller.admin.file.vo.file.*;
 import cn.iocoder.yudao.module.infra.dal.dataobject.file.FileDO;
 import cn.iocoder.yudao.module.infra.service.file.FileService;
+import cn.iocoder.yudao.module.infra.service.file.FileUploadService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.Parameters;
@@ -42,6 +43,8 @@ public class FileController {
 
     @Resource
     private FileService fileService;
+    @Resource
+    private FileUploadService fileUploadService;
 
     @PostMapping("/upload")
     @Operation(summary = "上传文件", description = "模式一：后端上传文件")
@@ -126,6 +129,63 @@ public class FileController {
         FileDO file = fileService.getFileByConfigIdAndPath(configId, path);
         String filename = file != null && StrUtil.isNotEmpty(file.getName()) ? file.getName() : FileUtil.getName(path);
         writeAttachment(response, filename, content);
+    }
+
+    @PostMapping("/upload-task/init")
+    @Operation(summary = "初始化直传任务")
+    @PreAuthorize("@ss.hasPermission('infra:file:create')")
+    public CommonResult<FileUploadInitRespVO> initUploadTask(@Valid @RequestBody FileUploadInitReqVO reqVO) {
+        return success(fileUploadService.init(reqVO));
+    }
+
+    @PostMapping("/upload-task/part-urls")
+    @Operation(summary = "签发分片上传地址")
+    @PreAuthorize("@ss.hasPermission('infra:file:create')")
+    public CommonResult<List<FileUploadPartRespVO>> partUrls(@Valid @RequestBody FileUploadPartReqVO reqVO) {
+        return success(fileUploadService.partUrls(reqVO));
+    }
+
+    @GetMapping("/upload-task/get")
+    @Operation(summary = "查询上传任务和已完成分片")
+    @PreAuthorize("@ss.hasPermission('infra:file:query')")
+    public CommonResult<FileUploadTaskRespVO> getUploadTask(@RequestParam("id") Long id) {
+        return success(fileUploadService.getTask(id));
+    }
+
+    @PostMapping("/upload-task/confirm")
+    @Operation(summary = "确认小文件直传")
+    @PreAuthorize("@ss.hasPermission('infra:file:create')")
+    public CommonResult<Long> confirmUploadTask(@RequestParam("id") Long id) {
+        return success(fileUploadService.confirm(id));
+    }
+
+    @PostMapping("/upload-task/complete")
+    @Operation(summary = "完成分片上传")
+    @PreAuthorize("@ss.hasPermission('infra:file:create')")
+    public CommonResult<Long> completeUploadTask(@Valid @RequestBody FileUploadCompleteReqVO reqVO) {
+        return success(fileUploadService.complete(reqVO));
+    }
+
+    @PostMapping("/upload-task/abort")
+    @Operation(summary = "取消上传任务")
+    @PreAuthorize("@ss.hasPermission('infra:file:create')")
+    public CommonResult<Boolean> abortUploadTask(@RequestParam("id") Long id) {
+        fileUploadService.abort(id);
+        return success(true);
+    }
+
+    @GetMapping("/presigned-get")
+    @Operation(summary = "按文件编号签发短时读取地址")
+    @PreAuthorize("@ss.hasPermission('infra:file:query')")
+    public CommonResult<String> presignGet(@RequestParam("id") Long id) {
+        return success(fileUploadService.presignGetByFileId(id));
+    }
+
+    @PostMapping("/relation/create")
+    @Operation(summary = "记录文件引用")
+    @PreAuthorize("@ss.hasPermission('infra:file:create')")
+    public CommonResult<Long> createRelation(@Valid @RequestBody FileRelationCreateReqVO reqVO) {
+        return success(fileUploadService.createRelation(reqVO.getFileId(), reqVO.getBizType(), reqVO.getBizId()).getId());
     }
 
     @GetMapping("/page")

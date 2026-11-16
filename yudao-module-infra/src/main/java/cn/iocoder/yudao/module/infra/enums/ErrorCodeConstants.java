@@ -35,6 +35,16 @@ public interface ErrorCodeConstants {
     ErrorCode FILE_IS_EMPTY = new ErrorCode(1_001_003_002, "文件为空");
     ErrorCode FILE_PATH_INVALID = new ErrorCode(1_001_003_003, "文件路径不正确");
     ErrorCode FILE_TYPE_NOT_ALLOWED = new ErrorCode(1_001_003_004, "不支持的文件类型");
+    ErrorCode FILE_REFERENCED = new ErrorCode(1_001_003_005, "文件仍被引用，不能删除");
+    ErrorCode FILE_UPLOAD_TASK_NOT_EXISTS = new ErrorCode(1_001_003_006, "上传任务不存在");
+    ErrorCode FILE_UPLOAD_TASK_FORBIDDEN = new ErrorCode(1_001_003_007, "只能操作自己的上传任务");
+    ErrorCode FILE_UPLOAD_TASK_EXPIRED = new ErrorCode(1_001_003_008, "上传任务已过期");
+    ErrorCode FILE_UPLOAD_TASK_STATE = new ErrorCode(1_001_003_009, "上传任务状态不正确");
+    ErrorCode FILE_UPLOAD_OBJECT_MISSING = new ErrorCode(1_001_003_010, "存储上没有这个对象");
+    ErrorCode FILE_UPLOAD_SIZE_MISMATCH = new ErrorCode(1_001_003_011, "对象大小和声明不一致");
+    ErrorCode FILE_UPLOAD_TYPE_MISMATCH = new ErrorCode(1_001_003_012, "对象内容和文件类型不一致");
+    ErrorCode FILE_PART_ETAG_MISMATCH = new ErrorCode(1_001_003_013, "分片和存储上的记录不一致");
+    ErrorCode FILE_TOO_LARGE = new ErrorCode(1_001_003_014, "文件超过大小限制");
 
     // ========== 代码生成器 1-001-004-000 ==========
     ErrorCode CODEGEN_TABLE_EXISTS = new ErrorCode(1_001_004_002, "表定义已经存在");

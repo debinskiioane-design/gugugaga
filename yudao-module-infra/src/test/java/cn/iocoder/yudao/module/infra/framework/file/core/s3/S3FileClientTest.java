@@ -5,6 +5,8 @@ import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.ReflectUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.iocoder.yudao.framework.common.util.validation.ValidationUtils;
+import cn.iocoder.yudao.module.infra.framework.file.core.client.local.LocalFileClient;
+import cn.iocoder.yudao.module.infra.framework.file.core.client.local.LocalFileClientConfig;
 import cn.iocoder.yudao.module.infra.framework.file.core.client.s3.S3FileClient;
 import cn.iocoder.yudao.module.infra.framework.file.core.client.s3.S3FileClientConfig;
 import jakarta.validation.Validation;
@@ -17,8 +19,8 @@ import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -300,6 +302,33 @@ public class S3FileClientTest {
         config.setEnablePathStyleAccess(pathStyle);
         config.setEnablePublicAccess(false);
         return config;
+    }
+
+    @Test
+    public void testPresignUploadPart_r2UsesApiEndpoint() {
+        S3FileClientConfig config = r2Config(true);
+        S3FileClient client = new S3FileClient(0L, config);
+        client.init();
+
+        String result = client.presignUploadPart("avatar.jpg", "upload-1", 2);
+        String stable = client.stableUrl("avatar.jpg");
+
+        assertTrue(result.startsWith("https://account.r2.cloudflarestorage.com/"));
+        assertTrue(result.contains("upload-1"));
+        assertTrue(result.contains("partNumber=2"));
+        assertTrue(result.contains("X-Amz-Expires=300"));
+        assertFalse(result.contains("static.example.com"));
+        assertEquals("https://static.example.com/avatar.jpg", stable);
+        assertFalse(stable.contains("X-Amz-"));
+    }
+
+    @Test
+    public void testMultipart_localClientUnsupported() {
+        LocalFileClient client = new LocalFileClient(1L, new LocalFileClientConfig());
+
+        assertThrows(UnsupportedOperationException.class,
+                () -> client.createMultipartUpload("a.jpg", "image/jpeg"));
+        assertThrows(UnsupportedOperationException.class, () -> client.head("a.jpg"));
     }
 
     @Test
