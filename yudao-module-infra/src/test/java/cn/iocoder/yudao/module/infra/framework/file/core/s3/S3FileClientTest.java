@@ -18,6 +18,7 @@ import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -176,6 +177,129 @@ public class S3FileClientTest {
         String result = client.presignPutUrl("avatar.jpg");
 
         assertTrue(result.startsWith("https://test-bucket.s3-cn-south-1.qiniucs.com/"));
+    }
+
+    @Test
+    public void testPresignPutUrl_r2UsesApiEndpointAndSignsContentType() {
+        S3FileClientConfig config = r2Config(true);
+        S3FileClient client = new S3FileClient(0L, config);
+        client.init();
+
+        String inferred = client.presignPutUrl("avatar.jpg");
+        String webp = client.presignPutUrl("avatar.jpg", "image/webp");
+
+        assertTrue(inferred.startsWith("https://account.r2.cloudflarestorage.com/"));
+        assertTrue(inferred.contains("/test-bucket/avatar.jpg"));
+        assertFalse(inferred.contains("static.example.com"));
+        assertTrue(inferred.contains("X-Amz-Expires=300"));
+        assertTrue(StrUtil.containsIgnoreCase(inferred, "content-type"));
+        assertTrue(webp.contains("X-Amz-Expires=300"));
+        assertTrue(StrUtil.containsIgnoreCase(webp, "content-type"));
+        assertTrue(inferred.contains("auto"));
+        assertEquals("access-key", config.getAccessKey());
+        assertEquals("plain-secret", config.getAccessSecret());
+    }
+
+    @Test
+    public void testPresignPutUrl_nonR2KeepsDayExpiryAndUnsignedContentType() {
+        S3FileClientConfig config = new S3FileClientConfig();
+        config.setAccessKey("access-key");
+        config.setAccessSecret("access-secret");
+        config.setBucket("test-bucket");
+        config.setDomain("https://custom.example.com");
+        config.setEndpoint("oss-cn-beijing.aliyuncs.com");
+        config.setEnablePathStyleAccess(false);
+        config.setEnablePublicAccess(false);
+        S3FileClient client = new S3FileClient(0L, config);
+        client.init();
+
+        String jpeg = client.presignPutUrl("avatar.jpg", "image/jpeg");
+        String png = client.presignPutUrl("avatar.jpg", "image/png");
+
+        assertTrue(jpeg.startsWith("https://test-bucket.oss-cn-beijing.aliyuncs.com/"));
+        assertTrue(png.startsWith("https://test-bucket.oss-cn-beijing.aliyuncs.com/"));
+        assertTrue(jpeg.contains("X-Amz-Expires=86400"));
+        assertFalse(StrUtil.containsIgnoreCase(jpeg, "content-type"));
+        assertFalse(StrUtil.containsIgnoreCase(png, "content-type"));
+    }
+
+    @Test
+    public void testPresignGetUrl_r2PublicUsesCustomDomain() {
+        S3FileClientConfig config = r2Config(true);
+        config.setEnablePublicAccess(true);
+        S3FileClient client = new S3FileClient(0L, config);
+
+        String result = client.presignGetUrl("avatar/图标.jpg", null);
+
+        assertEquals("https://static.example.com/avatar/%E5%9B%BE%E6%A0%87.jpg", result);
+        assertFalse(result.contains("X-Amz-"));
+    }
+
+    @Test
+    public void testPresignGetUrl_r2PrivateUsesApiEndpoint() {
+        S3FileClientConfig config = r2Config(true);
+        S3FileClient client = new S3FileClient(0L, config);
+        client.init();
+
+        String result = client.presignGetUrl("avatar.jpg", null);
+
+        assertTrue(result.startsWith("https://account.r2.cloudflarestorage.com/"));
+        assertFalse(result.contains("static.example.com"));
+        assertTrue(result.contains("X-Amz-Expires=300"));
+        assertTrue(result.contains("auto"));
+    }
+
+    @Test
+    public void testPresignPutUrl_r2HonorsConfiguredRegion() {
+        S3FileClientConfig config = r2Config(true);
+        config.setRegion("wnam");
+        S3FileClient client = new S3FileClient(0L, config);
+        client.init();
+
+        String result = client.presignPutUrl("avatar.jpg", "image/jpeg");
+
+        assertTrue(result.contains("wnam"));
+        assertFalse(result.contains("auto"));
+    }
+
+    @Test
+    public void testInit_envCredentialMissing_namesVariableOnly() {
+        S3FileClientConfig config = r2Config(true);
+        config.setAccessKey("visible-key");
+        config.setAccessSecret("env:R2_SECRET_KEY_NOT_SET_FOR_UNIT_TEST");
+        S3FileClient client = new S3FileClient(0L, config);
+
+        IllegalStateException ex = assertThrows(IllegalStateException.class, client::init);
+
+        assertTrue(ex.getMessage().contains("R2_SECRET_KEY_NOT_SET_FOR_UNIT_TEST"));
+        assertFalse(ex.getMessage().contains("visible-key"));
+        assertEquals("env:R2_SECRET_KEY_NOT_SET_FOR_UNIT_TEST", config.getAccessSecret());
+    }
+
+    @Test
+    @Disabled // Cloudflare R2，需要 R2_ACCESS_KEY、R2_SECRET_KEY、R2_ENDPOINT、R2_BUCKET、R2_PUBLIC_DOMAIN
+    public void testR2() {
+        S3FileClientConfig config = new S3FileClientConfig();
+        config.setAccessKey("env:R2_ACCESS_KEY");
+        config.setAccessSecret("env:R2_SECRET_KEY");
+        config.setEndpoint(System.getenv("R2_ENDPOINT"));
+        config.setBucket(System.getenv("R2_BUCKET"));
+        config.setDomain(System.getenv("R2_PUBLIC_DOMAIN"));
+        config.setEnablePathStyleAccess(true);
+        config.setEnablePublicAccess(true);
+        testExecuteUpload(config);
+    }
+
+    private static S3FileClientConfig r2Config(boolean pathStyle) {
+        S3FileClientConfig config = new S3FileClientConfig();
+        config.setAccessKey("access-key");
+        config.setAccessSecret("plain-secret");
+        config.setBucket("test-bucket");
+        config.setDomain("https://static.example.com");
+        config.setEndpoint("https://account.r2.cloudflarestorage.com");
+        config.setEnablePathStyleAccess(pathStyle);
+        config.setEnablePublicAccess(false);
+        return config;
     }
 
     @Test

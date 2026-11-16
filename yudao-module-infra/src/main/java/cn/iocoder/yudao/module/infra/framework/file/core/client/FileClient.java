@@ -53,6 +53,17 @@ public interface FileClient {
     }
 
     /**
+     * 获得文件预签名地址，用于上传。contentType 仅在存储器需要把它签进 URL 时生效。
+     *
+     * @param path        相对路径
+     * @param contentType 浏览器实际上传时携带的 Content-Type，允许空
+     * @return 文件预签名地址
+     */
+    default String presignPutUrl(String path, String contentType) {
+        return presignPutUrl(path);
+    }
+
+    /**
      * 生成文件预签名地址，用于读取
      *
      * @param url 完整的文件访问地址

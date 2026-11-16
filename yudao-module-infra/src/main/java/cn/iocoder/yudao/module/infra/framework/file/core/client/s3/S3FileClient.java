@@ -34,6 +34,13 @@ public class S3FileClient extends AbstractFileClient<S3FileClientConfig> {
 
     private static final Duration EXPIRATION_DEFAULT = Duration.ofHours(24);
 
+    /**
+     * R2 预签名默认有效期。公开读不签名；私有读和直传 PUT 使用这个较短窗口。
+     */
+    private static final Duration R2_PRESIGN_EXPIRATION = Duration.ofMinutes(5);
+
+    private static final String ENV_PREFIX = "env:";
+
     private static final String CONTENT_DISPOSITION_ATTACHMENT = "attachment";
 
     private S3Client client;
@@ -53,8 +60,10 @@ public class S3FileClient extends AbstractFileClient<S3FileClientConfig> {
         // 优先级：配置的 region > 从 endpoint 解析的 region > 默认值 us-east-1
         String regionStr = resolveRegion();
         Region region = Region.of(regionStr);
+        // 密钥只在建连时解析。env:NAME 从环境变量取值，不写回配置，避免日志和刷新比较带出明文
         AwsCredentialsProvider credentialsProvider = StaticCredentialsProvider.create(
-                AwsBasicCredentials.create(config.getAccessKey(), config.getAccessSecret()));
+                AwsBasicCredentials.create(resolveCredential(config.getAccessKey()),
+                        resolveCredential(config.getAccessSecret())));
         URI endpoint = URI.create(buildEndpoint());
         URI presignerEndpoint = URI.create(buildPresignerEndpoint());
         S3Configuration serviceConfiguration = S3Configuration.builder() // Path-style 访问
@@ -112,9 +121,25 @@ public class S3FileClient extends AbstractFileClient<S3FileClientConfig> {
 
     @Override
     public String presignPutUrl(String path) {
+        return presignPutUrl(path, null);
+    }
+
+    @Override
+    public String presignPutUrl(String path, String contentType) {
+        // 只有 R2 把 Content-Type 签进 URL。其它 S3 仍只签 host，避免已有前端直传签名不匹配
+        String signedContentType = null;
+        if (isCloudflareR2()) {
+            signedContentType = StrUtil.isNotEmpty(contentType) ? contentType : FileTypeUtils.getMineType(path);
+        }
+        String finalContentType = signedContentType;
         return presigner.presignPutObject(PutObjectPresignRequest.builder()
-                .signatureDuration(EXPIRATION_DEFAULT)
-                .putObjectRequest(b -> b.bucket(config.getBucket()).key(path)).build())
+                .signatureDuration(presignExpiration())
+                .putObjectRequest(b -> {
+                    b.bucket(config.getBucket()).key(path);
+                    if (StrUtil.isNotEmpty(finalContentType)) {
+                        b.contentType(finalContentType);
+                    }
+                }).build())
                 .url().toString();
     }
 
@@ -137,7 +162,7 @@ public class S3FileClient extends AbstractFileClient<S3FileClientConfig> {
 
         // 2.2 情况二：私有访问：生成 GET 预签名 URL
         String finalPath = path;
-        Duration expiration = expirationSeconds != null ? Duration.ofSeconds(expirationSeconds) : EXPIRATION_DEFAULT;
+        Duration expiration = expirationSeconds != null ? Duration.ofSeconds(expirationSeconds) : presignExpiration();
         // 新签发的私有 URL：对象 key 扩展名为 SVG 等可携带脚本的类型时，要求按附件下载
         // 注意：不覆盖公开访问、已签发的 URL，以及扩展名与 Content-Type 不一致的直传对象
         String contentDisposition = FileTypeUtils.isScriptable(FileTypeUtils.getMineType(finalPath))
@@ -183,10 +208,11 @@ public class S3FileClient extends AbstractFileClient<S3FileClientConfig> {
      * @return 节点地址
      */
     private String buildPresignerEndpoint() {
-        // 阿里云 OSS、七牛云的自定义域名仅用于文件访问，不能作为 S3 签名节点。
-        // Presigner 必须使用服务商提供的 endpoint，否则生成的签名无法用于直传。
+        // 自定义域名只用于公开读取。R2、阿里云、七牛的签名必须打到 API endpoint，
+        // 否则 Host 和签名对不上，直传会被拒绝。
         if (StrUtil.contains(config.getEndpoint(), S3FileClientConfig.ENDPOINT_ALIYUN)
-                || StrUtil.contains(config.getEndpoint(), S3FileClientConfig.ENDPOINT_QINIU)) {
+                || StrUtil.contains(config.getEndpoint(), S3FileClientConfig.ENDPOINT_QINIU)
+                || isCloudflareR2()) {
             return buildEndpoint();
         }
         // 补全 domain
@@ -210,6 +236,10 @@ public class S3FileClient extends AbstractFileClient<S3FileClientConfig> {
         // 1. 如果配置了 region，直接使用
         if (StrUtil.isNotEmpty(config.getRegion())) {
             return config.getRegion();
+        }
+        // R2 未填写时固定 auto，不能落到 us-east-1，否则签名范围和 Cloudflare 不一致
+        if (isCloudflareR2()) {
+            return "auto";
         }
 
         // 2.1 尝试从 endpoint 中解析 region
@@ -267,6 +297,35 @@ public class S3FileClient extends AbstractFileClient<S3FileClientConfig> {
 
         // 3.4 其他情况（MinIO、RustFS、七牛云等）使用默认值
         return "us-east-1";
+    }
+
+    private boolean isCloudflareR2() {
+        return StrUtil.contains(config.getEndpoint(), S3FileClientConfig.ENDPOINT_CLOUDFLARE);
+    }
+
+    /**
+     * R2 默认 5 分钟。其它 S3 仍是 24 小时，避免改动已发出的直传约定。
+     */
+    private Duration presignExpiration() {
+        return isCloudflareR2() ? R2_PRESIGN_EXPIRATION : EXPIRATION_DEFAULT;
+    }
+
+    /**
+     * 明文凭证原样返回。env:NAME 只在建连时解析，异常里只出现变量名。
+     */
+    private String resolveCredential(String value) {
+        if (StrUtil.isEmpty(value) || !StrUtil.startWith(value, ENV_PREFIX)) {
+            return value;
+        }
+        String name = StrUtil.trim(StrUtil.removePrefix(value, ENV_PREFIX));
+        if (StrUtil.isEmpty(name)) {
+            throw new IllegalStateException("S3 凭证环境变量名为空");
+        }
+        String resolved = System.getenv(name);
+        if (StrUtil.isEmpty(resolved)) {
+            throw new IllegalStateException("S3 凭证环境变量未设置: " + name);
+        }
+        return resolved;
     }
 
 }

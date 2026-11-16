@@ -21,6 +21,10 @@ public class S3FileClientConfig implements FileClientConfig {
     public static final String ENDPOINT_ALIYUN = "aliyuncs.com";
     public static final String ENDPOINT_TENCENT = "myqcloud.com";
     public static final String ENDPOINT_VOLCES = "volces.com"; // 火山云（字节）
+    /**
+     * Cloudflare R2 的 S3 API 主机后缀。公共读域名必须写在 domain，不能拿来签名。
+     */
+    public static final String ENDPOINT_CLOUDFLARE = "r2.cloudflarestorage.com";
 
     /**
      * 节点地址
@@ -31,6 +35,7 @@ public class S3FileClientConfig implements FileClientConfig {
      * 5. 华为云：https://console.huaweicloud.com/apiexplorer/#/endpoint/OBS
      * 6. 火山云：https://www.volcengine.com/docs/6349/107356
      * 7. RustFS：https://docs.rustfs.com/en/administration/protocols/s3/ 。例如说，http://127.0.0.1:9000（S3 API 端口，不是 9001 控制台端口）
+     * 8. Cloudflare R2：https://ACCOUNT_ID.r2.cloudflarestorage.com 。这是签名用的 API 地址，不是公共访问域名
      */
     @NotNull(message = "endpoint 不能为空")
     private String endpoint;
@@ -43,6 +48,7 @@ public class S3FileClientConfig implements FileClientConfig {
      * 5. 华为云：https://support.huaweicloud.com/usermanual-obs/obs_03_0032.html
      * 6. 火山云：https://www.volcengine.com/docs/6349/128983
      * 7. RustFS：不填写时为 endpoint/bucket；PathStyle 访问时需带上 /bucket，例如说 http://127.0.0.1:9000/ruoyi-vue-pro，且需前端可访问
+     * 8. Cloudflare R2：填写自定义公共域名，例如 https://static.example.com 。不要填 r2.cloudflarestorage.com
      */
     @URL(message = "domain 必须是 URL 格式")
     private String domain;
@@ -61,11 +67,12 @@ public class S3FileClientConfig implements FileClientConfig {
      * 5. 华为云：https://support.huaweicloud.com/qs-obs/obs_qs_0005.html
      * 6. 火山云：https://console.volcengine.com/iam/keymanage/
      * 7. RustFS：https://docs.rustfs.com/en/installation/container/docker/ 。例如说，启动时配置的 RUSTFS_ACCESS_KEY
+     * 8. Cloudflare R2：可填写 env:变量名，运行时从环境变量读取，避免把密钥明文写进配置表
      */
     @NotNull(message = "accessKey 不能为空")
     private String accessKey;
     /**
-     * 访问 Secret
+     * 访问 Secret。和 accessKey 一样，可以填写 env:变量名，运行时读取，不写回配置。
      */
     @NotNull(message = "accessSecret 不能为空")
     private String accessSecret;
@@ -74,6 +81,7 @@ public class S3FileClientConfig implements FileClientConfig {
      * 是否启用 PathStyle 访问
      *
      * MinIO、RustFS：建议 true。其中，RustFS 默认使用 PathStyle，虚拟主机风格需服务端额外配置 RUSTFS_SERVER_DOMAINS
+     * Cloudflare R2：建议 true，签名主机保持 ACCOUNT_ID.r2.cloudflarestorage.com
      */
     @NotNull(message = "enablePathStyleAccess 不能为空")
     private Boolean enablePathStyleAccess;
@@ -97,6 +105,7 @@ public class S3FileClientConfig implements FileClientConfig {
      * 6. 华为云：不需要填写，会自动识别
      * 7. 火山云：不需要填写，会自动识别
      * 8. RustFS：需与服务端的 RUSTFS_REGION 一致，默认 us-east-1；不填写时，也使用 us-east-1
+     * 9. Cloudflare R2：填 auto。不填写时也使用 auto
      */
     private String region;
 
