@@ -188,6 +188,13 @@ public class FileController {
         return success(fileUploadService.createRelation(reqVO.getFileId(), reqVO.getBizType(), reqVO.getBizId()).getId());
     }
 
+    @GetMapping("/relation/list")
+    @Operation(summary = "查询文件引用")
+    @PreAuthorize("@ss.hasPermission('infra:file:query')")
+    public CommonResult<List<FileRelationRespVO>> listRelations(@RequestParam("fileId") Long fileId) {
+        return success(BeanUtils.toBean(fileUploadService.listRelations(fileId), FileRelationRespVO.class));
+    }
+
     @GetMapping("/page")
     @Operation(summary = "获得文件分页")
     @PreAuthorize("@ss.hasPermission('infra:file:query')")

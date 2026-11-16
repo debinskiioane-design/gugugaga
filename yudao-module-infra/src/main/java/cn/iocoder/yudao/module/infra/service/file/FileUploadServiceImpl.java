@@ -330,6 +330,14 @@ public class FileUploadServiceImpl implements FileUploadService {
     }
 
     @Override
+    public List<FileRelationDO> listRelations(Long fileId) {
+        if (fileMapper.selectById(fileId) == null) {
+            throw exception(FILE_NOT_EXISTS);
+        }
+        return relationMapper.selectListByFileId(fileId);
+    }
+
+    @Override
     public String presignGetByFileId(Long fileId) {
         FileDO file = fileMapper.selectById(fileId);
         if (file == null) {

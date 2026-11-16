@@ -108,3 +108,15 @@ export const abortUploadTask = (id: number) => {
 export const presignGetFile = (id: number) => {
   return request.get<string>({ url: '/infra/file/presigned-get', params: { id } })
 }
+
+export interface FileRelationRespVO {
+  id: number
+  fileId: number
+  bizType: string
+  bizId: string
+  createTime?: string
+}
+
+export const getFileRelationList = (fileId: number) => {
+  return request.get<FileRelationRespVO[]>({ url: '/infra/file/relation/list', params: { fileId } })
+}

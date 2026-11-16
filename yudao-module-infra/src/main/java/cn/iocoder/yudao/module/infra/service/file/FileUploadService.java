@@ -31,6 +31,8 @@ public interface FileUploadService {
 
     FileRelationDO createRelation(Long fileId, String bizType, String bizId);
 
+    List<FileRelationDO> listRelations(Long fileId);
+
     String presignGetByFileId(Long fileId);
 
 }
