@@ -53,5 +53,13 @@ public class FileDO extends BaseDO {
      * 文件大小
      */
     private Long size;
+    /**
+     * 客户端声明的哈希。服务端核对的是大小和文件头，不是整文件哈希。
+     */
+    private String hash;
+    /**
+     * 状态。1 表示正常。旧数据为空，按正常处理。
+     */
+    private Integer status;
 
 }
