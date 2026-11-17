@@ -7,6 +7,7 @@ import cn.iocoder.yudao.module.infra.controller.admin.file.vo.file.FileUploadIni
 import cn.iocoder.yudao.module.infra.controller.admin.file.vo.file.FileUploadPartReqVO;
 import cn.iocoder.yudao.module.infra.dal.dataobject.file.FileDO;
 import cn.iocoder.yudao.module.infra.dal.dataobject.file.FileOperationLogDO;
+import cn.iocoder.yudao.module.infra.dal.dataobject.file.FileRelationDO;
 import cn.iocoder.yudao.module.infra.dal.dataobject.file.FileUploadTaskDO;
 import cn.iocoder.yudao.module.infra.dal.mysql.file.FileMapper;
 import cn.iocoder.yudao.module.infra.dal.mysql.file.FileOperationLogMapper;
@@ -22,6 +23,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static cn.iocoder.yudao.module.infra.enums.ErrorCodeConstants.FILE_NOT_EXISTS;
 import static cn.iocoder.yudao.module.infra.enums.ErrorCodeConstants.FILE_PART_ETAG_MISMATCH;
 import static cn.iocoder.yudao.module.infra.enums.ErrorCodeConstants.FILE_REFERENCED;
 import static cn.iocoder.yudao.module.infra.enums.ErrorCodeConstants.FILE_UPLOAD_OBJECT_MISSING;
@@ -263,6 +265,33 @@ public class FileUploadServiceImplTest {
 
         assertEquals(FILE_REFERENCED.getCode(), ex.getCode());
         verify(client, never()).delete(anyString());
+    }
+
+    @Test
+    public void testListRelations_returnsRowsForExistingFile() {
+        FileDO file = new FileDO();
+        file.setId(3L);
+        when(fileMapper.selectById(3L)).thenReturn(file);
+        FileRelationDO row = new FileRelationDO();
+        row.setFileId(3L);
+        row.setBizType("article");
+        row.setBizId("20");
+        when(relationMapper.selectListByFileId(3L)).thenReturn(List.of(row));
+
+        List<FileRelationDO> rows = service.listRelations(3L);
+
+        assertEquals(1, rows.size());
+        assertEquals("article", rows.get(0).getBizType());
+        assertEquals("20", rows.get(0).getBizId());
+    }
+
+    @Test
+    public void testListRelations_missingFile() {
+        when(fileMapper.selectById(3L)).thenReturn(null);
+
+        ServiceException ex = assertThrows(ServiceException.class, () -> service.listRelations(3L));
+
+        assertEquals(FILE_NOT_EXISTS.getCode(), ex.getCode());
     }
 
     @Test

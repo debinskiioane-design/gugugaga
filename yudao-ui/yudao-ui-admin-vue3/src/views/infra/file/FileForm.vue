@@ -23,16 +23,17 @@
         <div class="el-upload__tip" style="color: red">
           提示：仅允许导入 jpg、png、gif 格式文件！
         </div>
+        <div v-if="formLoading" class="el-upload__tip">已上传 {{ uploadPercent }}%</div>
       </template>
     </el-upload>
     <template #footer>
       <el-button :disabled="formLoading" type="primary" @click="submitFileForm">确 定</el-button>
-      <el-button @click="dialogVisible = false">取 消</el-button>
+      <el-button @click="closeForm">取 消</el-button>
     </template>
   </Dialog>
 </template>
 <script lang="ts" setup>
-import { useUpload } from '@/components/UploadFile/src/useUpload'
+import { cancelUpload, useUpload } from '@/components/UploadFile/src/useUpload'
 import { UploadFile, UploadProgressEvent } from 'element-plus/es/components/upload/src/upload'
 
 defineOptions({ name: 'InfraFileForm' })
@@ -42,7 +43,7 @@ const message = useMessage() // 消息弹窗
 
 const dialogVisible = ref(false) // 弹窗的是否展示
 const formLoading = ref(false) // 表单的加载中
-const fileList = ref([]) // 文件列表
+const fileList = ref<UploadFile[]>([]) // 文件列表
 const data = ref({ path: '' })
 const uploadRef = ref()
 
@@ -61,8 +62,10 @@ const handleFileChange = (file: UploadFile) => {
 }
 
 /** 处理文件上传进度显示 */
+const uploadPercent = ref(0)
 const handleProgress = (upEvt: UploadProgressEvent, file: UploadFile) => {
   file.percentage = upEvt.percent
+  uploadPercent.value = Math.round(upEvt.percent || 0)
 }
 
 /** 提交表单 */
@@ -93,10 +96,17 @@ const submitFormError = (): void => {
   formLoading.value = false
 }
 
+const closeForm = () => {
+  fileList.value.forEach((file) => cancelUpload(file.uid))
+  dialogVisible.value = false
+  formLoading.value = false
+}
+
 /** 重置表单 */
 const resetForm = () => {
   // 重置上传状态和文件
   formLoading.value = false
+  uploadPercent.value = 0
   uploadRef.value?.clearFiles()
 }
 

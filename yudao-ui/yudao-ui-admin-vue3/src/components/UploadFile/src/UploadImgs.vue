@@ -24,6 +24,7 @@
       </div>
       <template #file="{ file }">
         <img :src="file.url" class="upload-image" />
+        <div v-if="file.status === 'uploading'" class="upload-progress">{{ file.percentage || 0 }}%</div>
         <div class="upload-handle" @click.stop>
           <div class="handle-icon" @click="imagePreview(file.url!)">
             <Icon icon="ep:zoom-in" />
@@ -47,7 +48,7 @@ import { ElNotification } from 'element-plus'
 import { createImageViewer } from '@/components/ImageViewer'
 
 import { propTypes } from '@/utils/propTypes'
-import { useUpload } from '@/components/UploadFile/src/useUpload'
+import { cancelUpload, useUpload } from '@/components/UploadFile/src/useUpload'
 
 defineOptions({ name: 'UploadImgs' })
 
@@ -174,6 +175,7 @@ const emitUpdateModelValue = () => {
 }
 // 删除图片
 const handleRemove = (uploadFile: UploadFile) => {
+  cancelUpload(uploadFile.uid)
   fileList.value = fileList.value.filter(
     (item) => item.url !== uploadFile.url || item.name !== uploadFile.name
   )
@@ -267,6 +269,19 @@ const handleExceed = () => {
       width: 100%;
       height: 100%;
       object-fit: contain;
+    }
+
+    .upload-progress {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      z-index: 1;
+      padding: 4px 0;
+      font-size: 12px;
+      color: #fff;
+      text-align: center;
+      background: rgb(0 0 0 / 55%);
     }
 
     .upload-handle {

@@ -9,6 +9,15 @@
       :inline="true"
       label-width="68px"
     >
+      <el-form-item label="文件名" prop="name">
+        <el-input
+          v-model="queryParams.name"
+          placeholder="请输入文件名"
+          clearable
+          @keyup.enter="handleQuery"
+          class="!w-240px"
+        />
+      </el-form-item>
       <el-form-item label="文件路径" prop="path">
         <el-input
           v-model="queryParams.path"
@@ -57,10 +66,16 @@
     </el-form>
   </ContentWrap>
 
+  <ContentWrap>
+    <MediaPicker v-model="pickedId" />
+    <div v-if="pickedId" class="mt-8px">当前选择的文件编号：{{ pickedId }}</div>
+  </ContentWrap>
+
   <!-- 列表 -->
   <ContentWrap>
     <el-table v-loading="loading" :data="list" @selection-change="handleRowCheckboxChange">
       <el-table-column type="selection" width="55" />
+      <el-table-column label="编号" align="center" prop="id" width="90" />
       <el-table-column label="文件名" align="center" prop="name" :show-overflow-tooltip="true" />
       <el-table-column label="文件路径" align="center" prop="path" :show-overflow-tooltip="true" />
       <el-table-column label="URL" align="center" prop="url" :show-overflow-tooltip="true" />
@@ -113,6 +128,10 @@
       />
       <el-table-column label="操作" align="center">
         <template #default="scope">
+          <el-button link type="primary" @click="copyToClipboard(String(scope.row.id))">
+            复制编号
+          </el-button>
+          <el-button link type="primary" @click="openRelations(scope.row)">引用</el-button>
           <el-button link type="primary" @click="copyToClipboard(scope.row.url)">
             复制链接
           </el-button>
@@ -138,12 +157,20 @@
 
   <!-- 表单弹窗：添加/修改 -->
   <FileForm ref="formRef" @success="getList" />
+  <el-dialog v-model="relationVisible" title="文件引用" width="640px">
+    <div class="mb-12px">文件编号 {{ relationFileId }}。业务表保存这个编号，不把完整地址当作唯一标识。</div>
+    <el-table :data="relations" empty-text="还没有业务引用">
+      <el-table-column label="业务类型" prop="bizType" />
+      <el-table-column label="业务编号" prop="bizId" />
+    </el-table>
+  </el-dialog>
 </template>
 <script lang="ts" setup>
 import { fileSizeFormatter } from '@/utils'
 import { dateFormatter } from '@/utils/formatTime'
 import * as FileApi from '@/api/infra/file'
 import FileForm from './FileForm.vue'
+import { MediaPicker } from '@/components/MediaPicker'
 import { useClipboard } from '@vueuse/core'
 
 defineOptions({ name: 'InfraFile' })
@@ -192,6 +219,16 @@ const resetQuery = () => {
 const formRef = ref()
 const openForm = () => {
   formRef.value.open()
+}
+
+const pickedId = ref<number>()
+const relationVisible = ref(false)
+const relationFileId = ref<number>()
+const relations = ref<FileApi.FileRelationRespVO[]>([])
+const openRelations = async (row) => {
+  relationFileId.value = row.id
+  relationVisible.value = true
+  relations.value = await FileApi.getFileRelationList(row.id)
 }
 
 /** 复制到剪贴板方法 */
