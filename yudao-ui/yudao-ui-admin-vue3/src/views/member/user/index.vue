@@ -95,7 +95,7 @@
       <el-table-column align="center" label="用户编号" prop="id" width="120px" />
       <el-table-column align="center" label="头像" prop="avatar" width="80px">
         <template #default="scope">
-          <img :src="scope.row.avatar" style="width: 40px" />
+          <FileImage :src="scope.row.avatar" image-style="width:40px;height:40px" />
         </template>
       </el-table-column>
       <el-table-column align="center" label="手机号" prop="mobile" width="120px" />
@@ -212,6 +212,7 @@
   <CouponSendForm ref="couponSendFormRef" />
 </template>
 <script lang="ts" setup>
+import { FileImage } from '@/components/FileImage'
 import { dateFormatter } from '@/utils/formatTime'
 import * as UserApi from '@/api/member/user'
 import { DICT_TYPE } from '@/utils/dict'

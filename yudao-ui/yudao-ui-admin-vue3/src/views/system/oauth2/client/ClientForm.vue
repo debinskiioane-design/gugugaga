@@ -17,6 +17,7 @@
         <el-input v-model="formData.name" placeholder="请输入应用名" />
       </el-form-item>
       <el-form-item label="应用图标">
+        <!-- 持久化 infra_file 编号；预览由 UploadImg / MediaPicker 解析 -->
         <UploadImg v-model="formData.logo" :limit="1" />
       </el-form-item>
       <el-form-item label="应用描述">

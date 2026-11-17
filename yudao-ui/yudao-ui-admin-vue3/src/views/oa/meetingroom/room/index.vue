@@ -88,13 +88,12 @@
     <el-table v-loading="loading" :data="list">
       <el-table-column label="会议室图片" width="110">
         <template #default="{ row }">
-          <el-image
+          <FileImage
             v-if="row.picUrl"
             :src="row.picUrl"
-            :preview-src-list="[row.picUrl]"
-            preview-teleported
+            preview
             fit="cover"
-            class="h-50px w-70px"
+            image-class="h-50px w-70px"
           />
         </template>
       </el-table-column>
@@ -174,6 +173,7 @@
 </template>
 
 <script setup lang="ts">
+import { FileImage } from '@/components/FileImage'
 import * as MeetingRoomApi from '@/api/oa/meetingroom/room'
 import { dateFormatter } from '@/utils/formatTime'
 import { DICT_TYPE, getIntDictOptions } from '@/utils/dict'

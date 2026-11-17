@@ -110,9 +110,10 @@ public class FileServiceImplTest extends BaseDbUnitTest {
         }), eq(type))).thenReturn(url);
         when(client.getId()).thenReturn(10L);
         // 调用
-        String result = fileService.createFile(content, name, directory, type);
+        FileDO result = fileService.createFile(content, name, directory, type);
         // 断言
-        assertEquals(result, url);
+        assertEquals(url, result.getUrl());
+        assertNotNull(result.getId());
         // 校验数据
         FileDO file = fileMapper.selectOne(FileDO::getUrl, url);
         assertEquals(10L, file.getConfigId());
@@ -142,9 +143,10 @@ public class FileServiceImplTest extends BaseDbUnitTest {
         }), eq(type))).thenReturn(url);
         when(client.getId()).thenReturn(10L);
         // 调用
-        String result = fileService.createFile(content, null, null, null);
+        FileDO result = fileService.createFile(content, null, null, null);
         // 断言
-        assertEquals(result, url);
+        assertEquals(url, result.getUrl());
+        assertNotNull(result.getId());
         // 校验数据
         FileDO file = fileMapper.selectOne(FileDO::getUrl, url);
         assertEquals(10L, file.getConfigId());
@@ -170,9 +172,10 @@ public class FileServiceImplTest extends BaseDbUnitTest {
             when(client.upload(same(content), anyString(), eq(type))).thenReturn(url);
 
             // 调用
-            String result = fileService.createFile(content, name, null, "application/octet-stream");
+            FileDO result = fileService.createFile(content, name, null, "application/octet-stream");
             // 断言
-            assertEquals(url, result);
+            assertEquals(url, result.getUrl());
+            assertNotNull(result.getId());
             FileDO file = fileMapper.selectOne(FileDO::getUrl, url);
             assertEquals(name, file.getName());
             assertEquals(type, file.getType());
@@ -199,9 +202,10 @@ public class FileServiceImplTest extends BaseDbUnitTest {
             when(client.upload(same(content), anyString(), eq(type))).thenReturn(url);
 
             // 调用
-            String result = fileService.createFile(content, "用户." + extension, null, null);
+            FileDO result = fileService.createFile(content, "用户." + extension, null, null);
             // 断言
-            assertEquals(url, result);
+            assertEquals(url, result.getUrl());
+            assertNotNull(result.getId());
             assertEquals(type, fileMapper.selectOne(FileDO::getUrl, url).getType());
         }
     }
@@ -218,9 +222,10 @@ public class FileServiceImplTest extends BaseDbUnitTest {
             when(client.upload(same(content), anyString(), eq("image/jpeg"))).thenReturn(url);
 
             // 调用
-            String result = fileService.createFile(content, "头像.jpg", null, declaredType);
+            FileDO result = fileService.createFile(content, "头像.jpg", null, declaredType);
             // 断言
-            assertEquals(url, result);
+            assertEquals(url, result.getUrl());
+            assertNotNull(result.getId());
             assertEquals("image/jpeg", fileMapper.selectOne(FileDO::getUrl, url).getType());
         }
     }
@@ -244,9 +249,10 @@ public class FileServiceImplTest extends BaseDbUnitTest {
             when(client.upload(same(content), anyString(), eq(type))).thenReturn(url);
 
             // 调用
-            String result = fileService.createFile(content, name, null, "application/octet-stream");
+            FileDO result = fileService.createFile(content, name, null, "application/octet-stream");
             // 断言
-            assertEquals(url, result);
+            assertEquals(url, result.getUrl());
+            assertNotNull(result.getId());
             assertEquals(type, fileMapper.selectOne(FileDO::getUrl, url).getType());
         }
     }
@@ -264,9 +270,10 @@ public class FileServiceImplTest extends BaseDbUnitTest {
             when(client.upload(same(content), anyString(), eq("image/svg+xml"))).thenReturn(url);
 
             // 调用
-            String result = fileService.createFile(content, name, null, "text/plain");
+            FileDO result = fileService.createFile(content, name, null, "text/plain");
             // 断言：以内容识别的类型上传，文件存储器据此按附件下载
-            assertEquals(url, result);
+            assertEquals(url, result.getUrl());
+            assertNotNull(result.getId());
             FileDO file = fileMapper.selectOne(FileDO::getUrl, url);
             assertEquals(name, file.getName());
             assertEquals("image/svg+xml", file.getType());
@@ -286,9 +293,10 @@ public class FileServiceImplTest extends BaseDbUnitTest {
         when(client.upload(same(content), anyString(), eq("audio/opus"))).thenReturn(url);
 
         // 调用
-        String result = fileService.createFile(content, "voice.ogg", null, "audio/ogg;codecs=opus");
+        FileDO result = fileService.createFile(content, "voice.ogg", null, "audio/ogg;codecs=opus");
         // 断言
-        assertEquals(url, result);
+        assertEquals(url, result.getUrl());
+            assertNotNull(result.getId());
         assertEquals("audio/opus", fileMapper.selectOne(FileDO::getUrl, url).getType());
     }
 
@@ -333,9 +341,10 @@ public class FileServiceImplTest extends BaseDbUnitTest {
             when(client.upload(same(content), anyString(), eq("application/octet-stream"))).thenReturn(url);
 
             // 调用：不信任客户端传入的 type
-            String result = fileService.createFile(content, name, "iot/ota", "image/png");
+            FileDO result = fileService.createFile(content, name, "iot/ota", "image/png");
             // 断言
-            assertEquals(url, result);
+            assertEquals(url, result.getUrl());
+            assertNotNull(result.getId());
             FileDO file = fileMapper.selectOne(FileDO::getUrl, url);
             assertEquals(name, file.getName());
             assertEquals("application/octet-stream", file.getType());

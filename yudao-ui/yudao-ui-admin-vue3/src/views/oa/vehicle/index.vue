@@ -134,13 +134,12 @@
       </el-table-column>
       <el-table-column label="车辆照片" prop="picUrl" width="100">
         <template #default="{ row }">
-          <el-image
+          <FileImage
             v-if="row.picUrl"
             :src="row.picUrl"
-            :preview-src-list="[row.picUrl]"
-            preview-teleported
+            preview
             fit="cover"
-            class="h-40px w-40px"
+            image-class="h-40px w-40px"
           />
         </template>
       </el-table-column>
@@ -209,6 +208,7 @@
 </template>
 
 <script setup lang="ts">
+import { FileImage } from '@/components/FileImage'
 import { dateFormatter } from '@/utils/formatTime'
 import * as VehicleApi from '@/api/oa/vehicle'
 import OaVehicleForm from './OaVehicleForm.vue'

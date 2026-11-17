@@ -135,7 +135,7 @@
             </template>
           </el-table-column>
           <el-table-column label="头像" width="75" align="center">
-            <template #default="{ row }"><el-avatar :src="row.avatar" :size="32" /></template>
+            <template #default="{ row }"><FileImage :src="row.avatar" image-class="h-32px w-32px rounded-full" /></template>
           </el-table-column>
           <el-table-column label="性别" width="80" align="center">
             <template #default="{ row }">
@@ -308,6 +308,7 @@
 </template>
 
 <script setup lang="ts">
+import { FileImage } from '@/components/FileImage'
 import { DICT_TYPE } from '@/utils/dict'
 import OaContactCategorySelect from './components/OaContactCategorySelect.vue'
 import { dateFormatter } from '@/utils/formatTime'

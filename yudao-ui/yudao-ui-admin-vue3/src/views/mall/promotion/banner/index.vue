@@ -68,7 +68,7 @@
       <el-table-column align="center" label="Banner标题" prop="title" />
       <el-table-column align="center" label="图片" min-width="80" prop="picUrl">
         <template #default="{ row }">
-          <el-image :src="row.picUrl" class="h-30px w-30px" @click="imagePreview(row.picUrl)" />
+          <FileImage :src="row.picUrl" image-class="h-30px w-30px" preview />
         </template>
       </el-table-column>
       <el-table-column align="center" label="状态" prop="status">
@@ -126,6 +126,7 @@
 </template>
 
 <script lang="ts" setup>
+import { FileImage } from '@/components/FileImage'
 import { DICT_TYPE, getIntDictOptions } from '@/utils/dict'
 import { dateFormatter } from '@/utils/formatTime'
 import * as BannerApi from '@/api/mall/promotion/banner'

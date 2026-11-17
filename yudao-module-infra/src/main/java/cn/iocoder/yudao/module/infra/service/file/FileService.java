@@ -25,15 +25,15 @@ public interface FileService {
     PageResult<FileDO> getFilePage(FilePageReqVO pageReqVO);
 
     /**
-     * 保存文件，并返回文件的访问路径
+     * 保存文件，并返回文件记录（含编号与访问地址）
      *
      * @param content   文件内容
      * @param name      文件名称，允许空
      * @param directory 目录，允许空
      * @param type      文件的 MIME 类型，允许空
-     * @return 文件路径
+     * @return 文件记录
      */
-    String createFile(@NotEmpty(message = "文件内容不能为空") byte[] content,
+    FileDO createFile(@NotEmpty(message = "文件内容不能为空") byte[] content,
                       String name, String directory, String type);
 
     /**

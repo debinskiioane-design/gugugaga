@@ -37,6 +37,9 @@
         </div>
       </template>
     </el-upload>
+    <div v-if="!disabled && showMediaPicker" class="mt-8px">
+      <MediaPicker type="image/" :show-preview="false" :show-clear="false" @change="onPicked" />
+    </div>
     <div class="el-upload__tip">
       <slot name="tip"></slot>
     </div>
@@ -49,8 +52,12 @@ import { createImageViewer } from '@/components/ImageViewer'
 
 import { propTypes } from '@/utils/propTypes'
 import { cancelUpload, useUpload } from '@/components/UploadFile/src/useUpload'
+import { MediaPicker } from '@/components/MediaPicker'
+import { readUploadResult, rememberFileUrl, resolveFileUrl, toFileId } from '@/utils/fileUrl'
 
 defineOptions({ name: 'UploadImgs' })
+
+type FileItem = UploadUserFile & { fileId?: number }
 
 const message = useMessage() // 消息弹窗
 // 查看图片
@@ -83,7 +90,8 @@ const props = defineProps({
   height: propTypes.string.def('150px'), // 组件高度 ==> 非必传（默认为 150px）
   width: propTypes.string.def('150px'), // 组件宽度 ==> 非必传（默认为 150px）
   borderradius: propTypes.string.def('8px'), // 组件边框圆角 ==> 非必传（默认为 8px）
-  directory: propTypes.string.def(undefined) // 上传目录 ==> 非必传（默认为 undefined）
+  directory: propTypes.string.def(undefined), // 上传目录 ==> 非必传（默认为 undefined）
+  showMediaPicker: propTypes.bool.def(true)
 })
 
 const uploadStyle = computed(() => ({
@@ -94,8 +102,8 @@ const uploadStyle = computed(() => ({
 
 const { uploadUrl, httpRequest } = useUpload(props.directory)
 
-const fileList = ref<UploadUserFile[]>([])
-let emittedModelValue: string[] | undefined // 区分自身回写与切换表单后的外部重置
+const fileList = ref<FileItem[]>([])
+let emittedModelValue: Array<string | number> | undefined // 区分自身回写与切换表单后的外部重置
 /**
  * @description 文件上传之前判断
  * @param rawFile 上传的文件
@@ -122,9 +130,9 @@ const beforeUpload: UploadProps['beforeUpload'] = (rawFile) => {
   return isValidType && isValidSize
 }
 
-// 图片上传成功
+// 图片上传成功：业务字段保存文件编号
 interface UploadEmits {
-  (e: 'update:modelValue', value: string[]): void
+  (e: 'update:modelValue', value: Array<string | number>): void
 }
 
 const emit = defineEmits<UploadEmits>()
@@ -134,44 +142,91 @@ const uploadSuccess: UploadProps['onSuccess'] = (res: any, uploadFile): void => 
   if (index < 0) {
     return
   }
-  const response = res as { data: string }
+  const { id, url } = readUploadResult(res)
+  if (id != null) {
+    rememberFileUrl(id, url)
+  }
   fileList.value[index] = {
     ...fileList.value[index],
-    name: response.data,
-    url: response.data,
+    name: url,
+    url,
+    fileId: id,
     status: 'success'
   }
   message.success('上传成功')
   emitUpdateModelValue()
 }
 
+const onPicked = async (payload: { id?: number; url: string; name: string }) => {
+  if (payload.id == null) {
+    return
+  }
+  if (fileList.value.length >= props.limit) {
+    handleExceed()
+    return
+  }
+  if (fileList.value.some((item) => item.fileId === payload.id)) {
+    return
+  }
+  rememberFileUrl(payload.id, payload.url)
+  fileList.value.push({
+    name: payload.name || payload.url,
+    url: payload.url || (await resolveFileUrl(payload.id)),
+    fileId: payload.id,
+    status: 'success',
+    uid: Date.now()
+  })
+  emitUpdateModelValue()
+}
+
 // 监听模型绑定值变动
 watch(
   () => props.modelValue,
-  (val: string | string[]) => {
+  async (val) => {
     if (toRaw(val) === emittedModelValue) {
       emittedModelValue = undefined
       return // 保留同一批次尚未完成的上传文件
     }
     emittedModelValue = undefined
-    if (!val) {
-      fileList.value = [] // fix：处理掉缓存，表单重置后上传组件的内容并没有重置
+    if (!val || (Array.isArray(val) && val.length === 0)) {
+      fileList.value = []
       return
     }
 
-    fileList.value = [] // 保障数据为空
-    fileList.value.push(
-      ...(val as string[]).map((url) => ({ name: url.substring(url.lastIndexOf('/') + 1), url }))
-    )
+    const values = (Array.isArray(val) ? val : [val]) as Array<string | number>
+    const next: FileItem[] = []
+    for (const item of values) {
+      const id = toFileId(item)
+      if (id != null) {
+        const url = await resolveFileUrl(id)
+        next.push({
+          name: url.substring(url.lastIndexOf('/') + 1) || `文件 ${id}`,
+          url,
+          fileId: id,
+          status: 'success',
+          uid: id
+        })
+      } else {
+        const url = String(item)
+        next.push({
+          name: url.substring(url.lastIndexOf('/') + 1),
+          url,
+          status: 'success',
+          uid: Date.now() + next.length
+        })
+      }
+    }
+    fileList.value = next
   },
   { immediate: true, deep: true }
 )
-// 发送图片链接列表更新
+// 发送文件编号列表（无编号时回退 URL）
 const emitUpdateModelValue = () => {
-  emittedModelValue = fileList.value
+  const tokens: Array<string | number> = fileList.value
     .filter((file) => !file.status || file.status === 'success')
-    .map((file) => file.url!)
-  emit('update:modelValue', emittedModelValue)
+    .map((file) => (file.fileId != null ? file.fileId : file.url!))
+  emittedModelValue = tokens
+  emit('update:modelValue', tokens)
 }
 // 删除图片
 const handleRemove = (uploadFile: UploadFile) => {
