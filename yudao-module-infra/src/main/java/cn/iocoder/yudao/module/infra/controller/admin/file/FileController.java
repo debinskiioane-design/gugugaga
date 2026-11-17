@@ -47,14 +47,23 @@ public class FileController {
     private FileUploadService fileUploadService;
 
     @PostMapping("/upload")
-    @Operation(summary = "上传文件", description = "模式一：后端上传文件")
+    @Operation(summary = "上传文件", description = "模式一：后端上传文件。返回文件编号与访问地址，业务表应保存编号。")
     @Parameter(name = "file", description = "文件附件", required = true,
             schema = @Schema(type = "string", format = "binary"))
-    public CommonResult<String> uploadFile(@Valid FileUploadReqVO uploadReqVO) throws Exception {
+    public CommonResult<FileUploadRespVO> uploadFile(@Valid FileUploadReqVO uploadReqVO) throws Exception {
         MultipartFile file = uploadReqVO.getFile();
         byte[] content = IoUtil.readBytes(file.getInputStream());
-        return success(fileService.createFile(content, file.getOriginalFilename(),
-                uploadReqVO.getDirectory(), file.getContentType()));
+        FileDO created = fileService.createFile(content, file.getOriginalFilename(),
+                uploadReqVO.getDirectory(), file.getContentType());
+        return success(new FileUploadRespVO(created.getId(), created.getUrl()));
+    }
+
+    @GetMapping("/url")
+    @Operation(summary = "按文件编号解析访问地址", description = "供表单预览使用；登录即可，不要求 infra:file:query")
+    @Parameter(name = "id", description = "文件编号", required = true)
+    public CommonResult<String> getFileUrl(@RequestParam("id") Long id) {
+        FileDO file = fileService.getFile(id);
+        return success(file.getUrl());
     }
 
     @GetMapping("/presigned-url")

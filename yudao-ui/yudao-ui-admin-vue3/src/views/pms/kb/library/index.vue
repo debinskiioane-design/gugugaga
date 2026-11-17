@@ -53,7 +53,7 @@
       <el-table-column label="知识库" min-width="260">
         <template #default="scope">
           <div class="flex items-center gap-12px">
-            <el-image class="h-44px w-64px rounded" fit="cover" :src="scope.row.coverUrl">
+            <FileImage class="h-44px w-64px rounded" fit="cover" :src="scope.row.coverUrl">
               <template #error>
                 <div
                   class="flex h-44px w-64px items-center justify-center bg-[var(--el-fill-color-light)] text-[var(--el-text-color-secondary)]"
@@ -61,7 +61,7 @@
                   <Icon icon="ep:notebook" />
                 </div>
               </template>
-            </el-image>
+            </FileImage>
             <div>
               <el-link type="primary" @click="openDetail(scope.row.id)">
                 {{ scope.row.name }}
@@ -165,6 +165,7 @@
 </template>
 
 <script lang="ts" setup>
+import { FileImage } from '@/components/FileImage'
 import { parseId } from '@/utils/id'
 
 import * as KnowledgeFavoriteApi from '@/api/pms/kb/interaction/favorite'

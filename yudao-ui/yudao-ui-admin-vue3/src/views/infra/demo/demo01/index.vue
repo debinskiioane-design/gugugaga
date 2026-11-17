@@ -97,7 +97,11 @@
         width="180px"
       />
       <el-table-column label="简介" align="center" prop="description" />
-      <el-table-column label="头像" align="center" prop="avatar" />
+      <el-table-column label="头像" align="center" prop="avatar" width="80">
+        <template #default="{ row }">
+          <FileImage v-if="row.avatar" :src="row.avatar" image-class="h-40px w-40px" preview />
+        </template>
+      </el-table-column>
       <el-table-column
         label="创建时间"
         align="center"
@@ -140,6 +144,7 @@
 </template>
 
 <script setup lang="ts">
+import { FileImage } from '@/components/FileImage'
 import { getIntDictOptions, DICT_TYPE } from '@/utils/dict'
 import { isEmpty } from '@/utils/is'
 import { dateFormatter } from '@/utils/formatTime'

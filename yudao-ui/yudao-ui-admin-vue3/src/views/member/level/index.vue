@@ -45,19 +45,19 @@
       <el-table-column label="编号" align="center" prop="id" min-width="60" />
       <el-table-column label="等级图标" align="center" prop="icon" min-width="80">
         <template #default="scope">
-          <el-image
+          <FileImage
             :src="scope.row.icon"
-            class="h-30px w-30px"
-            :preview-src-list="[scope.row.icon]"
+            image-class="h-30px w-30px"
+            preview
           />
         </template>
       </el-table-column>
       <el-table-column label="等级背景图" align="center" prop="backgroundUrl" min-width="100">
         <template #default="scope">
-          <el-image
+          <FileImage
             :src="scope.row.backgroundUrl"
-            class="h-30px w-30px"
-            :preview-src-list="[scope.row.backgroundUrl]"
+            image-class="h-30px w-30px"
+            preview
           />
         </template>
       </el-table-column>
@@ -105,6 +105,7 @@
 </template>
 
 <script setup lang="ts">
+import { FileImage } from '@/components/FileImage'
 import { DICT_TYPE, getIntDictOptions } from '@/utils/dict'
 import { dateFormatter } from '@/utils/formatTime'
 import * as LevelApi from '@/api/member/level'

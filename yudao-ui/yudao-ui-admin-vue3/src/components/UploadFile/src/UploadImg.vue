@@ -14,15 +14,15 @@
       :on-success="uploadSuccess"
       :show-file-list="false"
     >
-      <template v-if="modelValue">
-        <img :src="modelValue" class="upload-image" />
+      <template v-if="previewUrl">
+        <img :src="previewUrl" class="upload-image" />
         <div v-if="uploading" class="upload-progress">上传中 {{ percent }}%</div>
         <div class="upload-handle" @click.stop>
           <div v-if="!disabled" class="handle-icon" @click="editImg">
             <Icon icon="ep:edit" />
             <span v-if="showBtnText">{{ t('action.edit') }}</span>
           </div>
-          <div class="handle-icon" @click="imagePreview(modelValue)">
+          <div class="handle-icon" @click="imagePreview(previewUrl)">
             <Icon icon="ep:zoom-in" />
             <span v-if="showBtnText">{{ t('action.detail') }}</span>
           </div>
@@ -41,6 +41,16 @@
         </div>
       </template>
     </el-upload>
+    <div v-if="!disabled && showMediaPicker" class="mt-8px">
+      <MediaPicker
+        v-model="pickedId"
+        type="image/"
+        :show-preview="false"
+        :show-clear="false"
+        @change="onPicked"
+      />
+    </div>
+    <div v-if="fileIdLabel" class="el-upload__tip">文件编号 {{ fileIdLabel }}</div>
     <div class="el-upload__tip">
       <slot name="tip"></slot>
     </div>
@@ -54,6 +64,8 @@ import { generateUUID } from '@/utils'
 import { propTypes } from '@/utils/propTypes'
 import { createImageViewer } from '@/components/ImageViewer'
 import { useUpload } from '@/components/UploadFile/src/useUpload'
+import { MediaPicker } from '@/components/MediaPicker'
+import { readUploadResult, rememberFileUrl, resolveFileUrl, toFileId } from '@/utils/fileUrl'
 
 defineOptions({ name: 'UploadImg' })
 
@@ -69,19 +81,23 @@ type FileTypes =
   | 'image/webp'
   | 'image/x-icon'
 
-// 接受父组件参数
+// 接受父组件参数；modelValue 存 infra_file 编号，兼容旧 URL 字符串
 const props = defineProps({
-  modelValue: propTypes.string.def(''),
-  drag: propTypes.bool.def(true), // 是否支持拖拽上传 ==> 非必传（默认为 true）
-  disabled: propTypes.bool.def(false), // 是否禁用上传组件 ==> 非必传（默认为 false）
-  fileSize: propTypes.number.def(5), // 图片大小限制 ==> 非必传（默认为 5M）
-  fileType: propTypes.array.def(['image/jpeg', 'image/png', 'image/gif']), // 图片类型限制 ==> 非必传（默认为 ["image/jpeg", "image/png", "image/gif"]）
-  height: propTypes.string.def('150px'), // 组件高度 ==> 非必传（默认为 150px）
-  width: propTypes.string.def('150px'), // 组件宽度 ==> 非必传（默认为 150px）
-  borderradius: propTypes.string.def('8px'), // 组件边框圆角 ==> 非必传（默认为 8px）
-  showDelete: propTypes.bool.def(true), // 是否显示删除按钮
-  showBtnText: propTypes.bool.def(true), // 是否显示按钮文字
-  directory: propTypes.string.def(undefined) // 上传目录 ==> 非必传（默认为 undefined）
+  modelValue: {
+    type: [String, Number],
+    default: ''
+  },
+  drag: propTypes.bool.def(true),
+  disabled: propTypes.bool.def(false),
+  fileSize: propTypes.number.def(5),
+  fileType: propTypes.array.def(['image/jpeg', 'image/png', 'image/gif']),
+  height: propTypes.string.def('150px'),
+  width: propTypes.string.def('150px'),
+  borderradius: propTypes.string.def('8px'),
+  showDelete: propTypes.bool.def(true),
+  showBtnText: propTypes.bool.def(true),
+  directory: propTypes.string.def(undefined),
+  showMediaPicker: propTypes.bool.def(true)
 })
 
 const uploadStyle = computed(() => ({
@@ -90,11 +106,14 @@ const uploadStyle = computed(() => ({
   '--upload-border-radius': props.borderradius
 }))
 
-const { t } = useI18n() // 国际化
-const message = useMessage() // 消息弹窗
-// 生成组件唯一id
+const { t } = useI18n()
+const message = useMessage()
 const uuid = ref('id-' + generateUUID())
-// 查看图片
+const previewUrl = ref('')
+const pickedId = ref<number | undefined>()
+
+const fileIdLabel = computed(() => toFileId(props.modelValue))
+
 const imagePreview = (imgUrl: string) => {
   createImageViewer({
     zIndex: 9999999,
@@ -102,10 +121,13 @@ const imagePreview = (imgUrl: string) => {
   })
 }
 
-const emit = defineEmits(['update:modelValue'])
+const emit = defineEmits(['update:modelValue', 'change'])
 
 const deleteImg = () => {
-  emit('update:modelValue', '')
+  previewUrl.value = ''
+  pickedId.value = undefined
+  emit('update:modelValue', undefined)
+  emit('change', { id: undefined, url: '', name: '' })
 }
 
 const percent = ref(0)
@@ -141,13 +163,51 @@ const beforeUpload: UploadProps['beforeUpload'] = (rawFile) => {
   return imgType.includes(rawFile.type as FileTypes) && imgSize
 }
 
-// 图片上传成功提示
 const uploadSuccess: UploadProps['onSuccess'] = (res: any): void => {
+  const { id, url } = readUploadResult(res)
   message.success('上传成功')
-  emit('update:modelValue', res.data)
+  if (id != null) {
+    rememberFileUrl(id, url)
+    previewUrl.value = url
+    pickedId.value = id
+    emit('update:modelValue', id)
+    emit('change', { id, url, name: '' })
+    return
+  }
+  // 极端兼容：没有编号时仍回写地址，避免完全丢图
+  previewUrl.value = url
+  emit('update:modelValue', url)
+  emit('change', { id: undefined, url, name: '' })
 }
 
-// 图片上传错误提示
+const onPicked = (payload: { id?: number; url: string; name: string }) => {
+  if (payload.id == null) {
+    deleteImg()
+    return
+  }
+  previewUrl.value = payload.url
+  emit('update:modelValue', payload.id)
+  emit('change', payload)
+}
+
+watch(
+  () => props.modelValue,
+  async (value) => {
+    const id = toFileId(value)
+    pickedId.value = id
+    if (value == null || value === '') {
+      previewUrl.value = ''
+      return
+    }
+    try {
+      previewUrl.value = await resolveFileUrl(value)
+    } catch {
+      previewUrl.value = typeof value === 'string' ? value : ''
+    }
+  },
+  { immediate: true }
+)
+
 const uploadError = () => {
   message.notifyError('图片上传失败，请您重新上传！')
 }

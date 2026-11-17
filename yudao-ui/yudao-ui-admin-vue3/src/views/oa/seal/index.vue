@@ -139,13 +139,12 @@
       </el-table-column>
       <el-table-column label="印章照片" width="100">
         <template #default="{ row }">
-          <el-image
+                    <FileImage
             v-if="row.picUrl"
             :src="row.picUrl"
-            :preview-src-list="[row.picUrl]"
-            preview-teleported
+            preview
             fit="contain"
-            class="h-50px w-50px"
+            image-class="h-50px w-50px"
           />
         </template>
       </el-table-column>
@@ -213,6 +212,7 @@
 </template>
 
 <script setup lang="ts">
+import { FileImage } from '@/components/FileImage'
 import { DICT_TYPE, getIntDictOptions } from '@/utils/dict'
 import OaSealDetail from './OaSealDetail.vue'
 import { dateFormatter, dateFormatter2 } from '@/utils/formatTime'

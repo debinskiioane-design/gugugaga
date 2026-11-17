@@ -40,9 +40,28 @@ export const createFile = (data: any) => {
   return request.post({ url: '/infra/file/create', data })
 }
 
-// 上传文件
+export interface FileUploadRespVO {
+  id: number
+  url: string
+}
+
+// 上传文件（返回编号 + 地址；业务表应保存编号）
 export const updateFile = (data: any, onUploadProgress?: Function) => {
   return request.upload({ url: '/infra/file/upload', data, onUploadProgress })
+}
+
+// 获得文件
+export const getFile = (id: number) => {
+  return request.get({ url: '/infra/file/get', params: { id } })
+}
+
+// 按编号解析访问地址（登录即可，供表单预览）
+export const getFileUrl = (id: number) => {
+  return request.get<string>({ url: '/infra/file/url', params: { id } })
+}
+
+export const createFileRelation = (data: { fileId: number; bizType: string; bizId: string }) => {
+  return request.post<number>({ url: '/infra/file/relation/create', data })
 }
 
 export interface FileUploadInitRespVO {

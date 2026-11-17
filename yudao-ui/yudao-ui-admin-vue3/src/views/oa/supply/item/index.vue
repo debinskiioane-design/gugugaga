@@ -121,13 +121,12 @@
       <el-table-column label="最低库存" prop="minStockQuantity" width="80" align="center" />
       <el-table-column label="图片" width="80">
         <template #default="{ row }">
-          <el-image
+          <FileImage
             v-if="row.picUrl"
             :src="row.picUrl"
-            :preview-src-list="[row.picUrl]"
-            preview-teleported
+            preview
             fit="cover"
-            class="h-40px w-40px"
+            image-class="h-40px w-40px"
           />
         </template>
       </el-table-column>
@@ -183,6 +182,7 @@
 </template>
 
 <script setup lang="ts">
+import { FileImage } from '@/components/FileImage'
 import { dateFormatter } from '@/utils/formatTime'
 import { erpPriceTableColumnFormatter } from '@/utils'
 import { DICT_TYPE, getIntDictOptions } from '@/utils/dict'

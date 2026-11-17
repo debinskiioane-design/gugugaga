@@ -35,6 +35,9 @@
       <template #file="row">
         <div class="flex items-center">
           <span>{{ row.file.name }}</span>
+          <span v-if="(row.file as FileItem).fileId" class="ml-10px text-gray-400">
+            #{{ (row.file as FileItem).fileId }}
+          </span>
           <span v-if="row.file.status === 'uploading'" class="ml-10px">
             {{ row.file.percentage || 0 }}%
           </span>
@@ -55,6 +58,9 @@
         </div>
       </template>
     </el-upload>
+    <div v-if="showMediaPicker" class="mt-8px">
+      <MediaPicker :show-preview="false" :show-clear="false" @change="onPicked" />
+    </div>
   </div>
 
   <!-- 上传操作禁用时 -->
@@ -76,14 +82,22 @@ import { isString } from '@/utils/is'
 import { getFileNameFromUrl } from '@/utils/file'
 import { cancelUpload, useUpload } from '@/components/UploadFile/src/useUpload'
 import { UploadFile } from 'element-plus/es/components/upload/src/upload'
+import { MediaPicker } from '@/components/MediaPicker'
+import { readUploadResult, rememberFileUrl, resolveFileUrl, toFileId } from '@/utils/fileUrl'
 
 defineOptions({ name: 'UploadFile' })
+
+type FileItem = UploadUserFile & { fileId?: number }
 
 const message = useMessage() // 消息弹窗
 const emit = defineEmits(['update:modelValue', 'update:fileSize'])
 
 const props = defineProps({
-  modelValue: propTypes.oneOfType<string | string[]>([String, Array<String>]).isRequired,
+  modelValue: propTypes.oneOfType<string | number | Array<string | number>>([
+    String,
+    Number,
+    Array
+  ]).isRequired,
   fileType: propTypes.array.def(['doc', 'xls', 'ppt', 'txt', 'pdf']), // 文件类型，空数组表示不限制格式
   fileSize: propTypes.number.def(5), // 大小限制(MB)
   limit: propTypes.number.def(5), // 数量限制
@@ -91,12 +105,13 @@ const props = defineProps({
   drag: propTypes.bool.def(false), // 拖拽上传
   isShowTip: propTypes.bool.def(true), // 是否显示提示
   disabled: propTypes.bool.def(false), // 是否禁用上传组件 ==> 非必传（默认为 false）
-  directory: propTypes.string.def(undefined) // 上传目录 ==> 非必传（默认为 undefined）
+  directory: propTypes.string.def(undefined), // 上传目录 ==> 非必传（默认为 undefined）
+  showMediaPicker: propTypes.bool.def(true)
 })
 
 // ========== 上传相关 ==========
-const fileList = ref<UploadUserFile[]>([])
-let emittedModelValue: string | string[] | undefined // 区分自身回写与切换表单后的外部重置
+const fileList = ref<FileItem[]>([])
+let emittedModelValue: string | number | Array<string | number> | undefined // 区分自身回写与切换表单后的外部重置
 
 const { uploadUrl, httpRequest } = useUpload(props.directory)
 
@@ -150,17 +165,43 @@ const handleFileSuccess: UploadProps['onSuccess'] = (res: any, uploadFile): void
   if (index < 0) {
     return
   }
-  const response = res as { data: string }
+  const { id, url } = readUploadResult(res)
+  if (id != null) {
+    rememberFileUrl(id, url)
+  }
   const fileSize = uploadFile.raw?.size
   fileList.value[index] = {
     ...fileList.value[index],
-    name: uploadFile.name || getFileNameFromUrl(response.data),
-    url: response.data,
+    name: uploadFile.name || getFileNameFromUrl(url),
+    url,
+    fileId: id,
     status: 'success'
   }
   message.success('上传成功')
   emitUpdateModelValue()
   emit('update:fileSize', fileSize)
+}
+
+const onPicked = async (payload: { id?: number; url: string; name: string }) => {
+  if (payload.id == null) {
+    return
+  }
+  if (fileList.value.length >= props.limit) {
+    message.error(`上传文件数量不能超过${props.limit}个!`)
+    return
+  }
+  if (fileList.value.some((item) => item.fileId === payload.id)) {
+    return
+  }
+  rememberFileUrl(payload.id, payload.url)
+  fileList.value.push({
+    name: payload.name || `文件 ${payload.id}`,
+    url: payload.url || (await resolveFileUrl(payload.id)),
+    fileId: payload.id,
+    status: 'success',
+    uid: Date.now()
+  })
+  emitUpdateModelValue()
 }
 // 文件数超出提示
 const handleExceed: UploadProps['onExceed'] = (): void => {
@@ -184,40 +225,71 @@ const handlePreview: UploadProps['onPreview'] = (uploadFile) => {
   console.log(uploadFile)
 }
 
-// 监听模型绑定值变动
+const toValueList = (val: string | number | Array<string | number>): Array<string | number> => {
+  if (Array.isArray(val)) {
+    return val
+  }
+  if (typeof val === 'number') {
+    return [val]
+  }
+  if (!val) {
+    return []
+  }
+  return String(val)
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
+// 监听模型绑定值变动：编号解析为可下载地址，旧 URL 原样展示
 watch(
   () => props.modelValue,
-  (val: string | string[]) => {
+  async (val) => {
     if (toRaw(val) === emittedModelValue) {
       emittedModelValue = undefined
       return // 保留同一批次尚未完成的上传文件
     }
     emittedModelValue = undefined
-    if (!val) {
-      fileList.value = [] // fix：处理掉缓存，表单重置后上传组件的内容并没有重置
+    if (val == null || val === '') {
+      fileList.value = []
       return
     }
 
-    fileList.value = [] // 保障数据为空
-    // 情况1：字符串
-    if (isString(val)) {
-      fileList.value.push(...val.split(',').map((url) => ({ name: getFileNameFromUrl(url), url })))
-      return
+    const values = toValueList(val as string | number | Array<string | number>)
+    const next: FileItem[] = []
+    for (const item of values) {
+      const id = toFileId(item)
+      if (id != null) {
+        const url = await resolveFileUrl(id)
+        next.push({
+          name: getFileNameFromUrl(url) || `文件 ${id}`,
+          url,
+          fileId: id,
+          status: 'success',
+          uid: id
+        })
+      } else {
+        const url = String(item)
+        next.push({
+          name: getFileNameFromUrl(url),
+          url,
+          status: 'success',
+          uid: Date.now() + next.length
+        })
+      }
     }
-    // 情况2：数组
-    fileList.value.push(...(val as string[]).map((url) => ({ name: getFileNameFromUrl(url), url })))
+    fileList.value = next
   },
   { immediate: true, deep: true }
 )
-// 发送文件链接列表更新
+// 发送文件编号列表（无编号时回退为 URL，兼容旧数据）
 const emitUpdateModelValue = () => {
-  // 情况1：数组结果
-  let result: string | string[] = fileList.value
+  const tokens = fileList.value
     .filter((file) => !file.status || file.status === 'success')
-    .map((file) => file.url!)
-  // 情况2：逗号分隔的字符串
-  if (props.limit === 1 || isString(props.modelValue)) {
-    result = result.join(',')
+    .map((file) => (file.fileId != null ? String(file.fileId) : file.url!))
+  let result: string | string[] = tokens
+  if (props.limit === 1 || isString(props.modelValue) || typeof props.modelValue === 'number') {
+    result = tokens.join(',')
   }
   emittedModelValue = result
   emit('update:modelValue', result)

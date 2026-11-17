@@ -62,7 +62,7 @@
       <el-table-column label="应用名" align="center" prop="name" />
       <el-table-column label="应用图标" align="center" prop="logo">
         <template #default="scope">
-          <img width="40px" height="40px" :src="scope.row.logo" />
+          <FileImage :src="scope.row.logo" image-style="width:40px;height:40px" />
         </template>
       </el-table-column>
       <el-table-column label="状态" align="center" prop="status">
@@ -130,6 +130,7 @@
   <ClientForm ref="formRef" @success="getList" />
 </template>
 <script lang="ts" setup>
+import { FileImage } from '@/components/FileImage'
 import { DICT_TYPE, getIntDictOptions } from '@/utils/dict'
 import { dateFormatter } from '@/utils/formatTime'
 import * as ClientApi from '@/api/system/oauth2/client'

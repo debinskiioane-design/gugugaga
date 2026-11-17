@@ -83,7 +83,7 @@
       <el-table-column align="center" label="ID" min-width="180" prop="id" />
       <el-table-column align="center" label="封面" min-width="80" prop="picUrl">
         <template #default="{ row }">
-          <el-image :src="row.picUrl" class="h-30px w-30px" @click="imagePreview(row.picUrl)" />
+          <FileImage :src="row.picUrl" image-class="h-30px w-30px" preview />
         </template>
       </el-table-column>
       <el-table-column align="center" label="标题" min-width="180" prop="title" />
@@ -143,6 +143,7 @@
 </template>
 
 <script lang="ts" setup>
+import { FileImage } from '@/components/FileImage'
 import { DICT_TYPE, getIntDictOptions } from '@/utils/dict'
 import { dateFormatter } from '@/utils/formatTime'
 import * as ArticleApi from '@/api/mall/promotion/article'

@@ -61,7 +61,7 @@
       <el-table-column label="品牌名称" prop="name" sortable />
       <el-table-column label="品牌图片" align="center" prop="picUrl">
         <template #default="scope">
-          <img v-if="scope.row.picUrl" :src="scope.row.picUrl" alt="品牌图片" class="h-30px" />
+          <FileImage v-if="scope.row.picUrl" :src="scope.row.picUrl" image-class="h-30px" />
         </template>
       </el-table-column>
       <el-table-column label="品牌排序" align="center" prop="sort" />
@@ -111,6 +111,7 @@
   <BrandForm ref="formRef" @success="getList" />
 </template>
 <script lang="ts" setup>
+import { FileImage } from '@/components/FileImage'
 import { DICT_TYPE, getIntDictOptions } from '@/utils/dict'
 import { dateFormatter } from '@/utils/formatTime'
 import * as ProductBrandApi from '@/api/mall/product/brand'

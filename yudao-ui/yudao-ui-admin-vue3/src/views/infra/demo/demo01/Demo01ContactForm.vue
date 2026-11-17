@@ -33,6 +33,7 @@
         <Editor v-model="formData.description" height="150px" />
       </el-form-item>
       <el-form-item label="头像" prop="avatar">
+        <!-- 保存文件编号；可用媒体库选择或本地上传 -->
         <UploadImg v-model="formData.avatar" />
       </el-form-item>
     </el-form>
