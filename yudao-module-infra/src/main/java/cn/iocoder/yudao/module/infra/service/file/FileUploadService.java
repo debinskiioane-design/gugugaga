@@ -5,6 +5,9 @@ import cn.iocoder.yudao.module.infra.controller.admin.file.vo.file.FileUploadIni
 import cn.iocoder.yudao.module.infra.controller.admin.file.vo.file.FileUploadInitRespVO;
 import cn.iocoder.yudao.module.infra.controller.admin.file.vo.file.FileUploadPartReqVO;
 import cn.iocoder.yudao.module.infra.controller.admin.file.vo.file.FileUploadPartRespVO;
+import cn.iocoder.yudao.framework.common.pojo.PageResult;
+import cn.iocoder.yudao.module.infra.controller.admin.file.vo.file.FileUploadTaskPageReqVO;
+import cn.iocoder.yudao.module.infra.controller.admin.file.vo.file.FileUploadTaskPageRespVO;
 import cn.iocoder.yudao.module.infra.controller.admin.file.vo.file.FileUploadTaskRespVO;
 import cn.iocoder.yudao.module.infra.dal.dataobject.file.FileRelationDO;
 
@@ -17,6 +20,8 @@ public interface FileUploadService {
     List<FileUploadPartRespVO> partUrls(FileUploadPartReqVO reqVO);
 
     FileUploadTaskRespVO getTask(Long id);
+
+    PageResult<FileUploadTaskPageRespVO> getTaskPage(FileUploadTaskPageReqVO reqVO);
 
     Long confirm(Long taskId);
 

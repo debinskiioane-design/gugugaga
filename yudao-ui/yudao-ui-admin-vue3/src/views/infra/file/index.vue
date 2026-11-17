@@ -155,6 +155,47 @@
     />
   </ContentWrap>
 
+  <ContentWrap>
+    <el-form :inline="true" class="-mb-15px" label-width="68px">
+      <el-form-item label="任务文件">
+        <el-input
+          v-model="taskQuery.name"
+          placeholder="请输入原文件名"
+          clearable
+          class="!w-240px"
+          @keyup.enter="loadTasks"
+        />
+      </el-form-item>
+      <el-form-item label="任务状态">
+        <el-select v-model="taskQuery.status" clearable placeholder="全部" class="!w-160px">
+          <el-option v-for="item in taskStatusOptions" :key="item.value" :label="item.label" :value="item.value" />
+        </el-select>
+      </el-form-item>
+      <el-form-item>
+        <el-button @click="loadTasks"><Icon icon="ep:search" class="mr-5px" /> 搜索任务</el-button>
+      </el-form-item>
+    </el-form>
+    <el-table v-loading="taskLoading" :data="taskList" class="mt-12px">
+      <el-table-column label="任务编号" prop="id" width="100" />
+      <el-table-column label="原文件名" prop="name" :show-overflow-tooltip="true" />
+      <el-table-column label="状态" width="100">
+        <template #default="{ row }">{{ taskStatusLabel(row.status) }}</template>
+      </el-table-column>
+      <el-table-column label="大小" prop="size" width="120" :formatter="fileSizeFormatter" />
+      <el-table-column label="分片" width="80">
+        <template #default="{ row }">{{ row.multipart ? '是' : '否' }}</template>
+      </el-table-column>
+      <el-table-column label="文件编号" prop="fileId" width="100" />
+      <el-table-column label="过期时间" prop="expireTime" width="180" :formatter="dateFormatter" />
+    </el-table>
+    <Pagination
+      :total="taskTotal"
+      v-model:page="taskQuery.pageNo"
+      v-model:limit="taskQuery.pageSize"
+      @pagination="loadTasks"
+    />
+  </ContentWrap>
+
   <!-- 表单弹窗：添加/修改 -->
   <FileForm ref="formRef" @success="getList" />
   <el-dialog v-model="relationVisible" title="文件引用" width="640px">
@@ -221,6 +262,36 @@ const openForm = () => {
   formRef.value.open()
 }
 
+const taskStatusOptions = [
+  { value: 0, label: '初始化' },
+  { value: 1, label: '上传中' },
+  { value: 2, label: '已完成' },
+  { value: 3, label: '已取消' },
+  { value: 4, label: '已过期' },
+  { value: 5, label: '失败' }
+]
+const taskStatusLabel = (status: number) =>
+  taskStatusOptions.find((item) => item.value === status)?.label || String(status)
+const taskLoading = ref(false)
+const taskList = ref<FileApi.FileUploadTaskPageRespVO[]>([])
+const taskTotal = ref(0)
+const taskQuery = reactive({
+  pageNo: 1,
+  pageSize: 10,
+  name: undefined as string | undefined,
+  status: undefined as number | undefined
+})
+const loadTasks = async () => {
+  taskLoading.value = true
+  try {
+    const data = await FileApi.getUploadTaskPage(taskQuery)
+    taskList.value = data.list
+    taskTotal.value = data.total
+  } finally {
+    taskLoading.value = false
+  }
+}
+
 const pickedId = ref<number>()
 const relationVisible = ref(false)
 const relationFileId = ref<number>()
@@ -279,5 +350,6 @@ const handleDeleteBatch = async () => {
 /** 初始化 **/
 onMounted(() => {
   getList()
+  loadTasks()
 })
 </script>

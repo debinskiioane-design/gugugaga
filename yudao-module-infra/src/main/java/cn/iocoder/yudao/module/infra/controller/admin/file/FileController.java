@@ -145,6 +145,13 @@ public class FileController {
         return success(fileUploadService.partUrls(reqVO));
     }
 
+    @GetMapping("/upload-task/page")
+    @Operation(summary = "上传任务分页")
+    @PreAuthorize("@ss.hasPermission('infra:file:query')")
+    public CommonResult<PageResult<FileUploadTaskPageRespVO>> getUploadTaskPage(@Valid FileUploadTaskPageReqVO pageVO) {
+        return success(fileUploadService.getTaskPage(pageVO));
+    }
+
     @GetMapping("/upload-task/get")
     @Operation(summary = "查询上传任务和已完成分片")
     @PreAuthorize("@ss.hasPermission('infra:file:query')")

@@ -1154,7 +1154,9 @@ CREATE TABLE infra_file (
     path nvarchar(512)  NOT NULL,
     url nvarchar(1024)  NOT NULL,
     type nvarchar(128) DEFAULT NULL NULL,
-    size int  NOT NULL,
+    size bigint NOT NULL,
+    hash nvarchar(128) DEFAULT NULL NULL,
+    status tinyint DEFAULT NULL NULL,
     creator nvarchar(64) DEFAULT '' NULL,
     create_time datetime2 DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updater nvarchar(64) DEFAULT '' NULL,
@@ -1213,6 +1215,20 @@ EXEC sp_addextendedproperty
 GO
 
 EXEC sp_addextendedproperty
+    'MS_Description', N'客户端声明的哈希，服务端核对大小和文件头',
+    'SCHEMA', N'dbo',
+    'TABLE', N'infra_file',
+    'COLUMN', N'hash'
+GO
+
+EXEC sp_addextendedproperty
+    'MS_Description', N'状态，1 正常',
+    'SCHEMA', N'dbo',
+    'TABLE', N'infra_file',
+    'COLUMN', N'status'
+GO
+
+EXEC sp_addextendedproperty
     'MS_Description', N'创建者',
     'SCHEMA', N'dbo',
     'TABLE', N'infra_file',
@@ -1257,6 +1273,79 @@ GO
 -- ----------------------------
 DROP TABLE IF EXISTS infra_file_config
 GO
+
+DROP TABLE IF EXISTS infra_file_upload_task
+GO
+CREATE TABLE infra_file_upload_task (
+    id bigint NOT NULL PRIMARY KEY IDENTITY,
+    config_id bigint NOT NULL,
+    owner_user_id bigint NOT NULL,
+    name nvarchar(256) DEFAULT NULL NULL,
+    path nvarchar(512) NOT NULL,
+    type nvarchar(128) DEFAULT NULL NULL,
+    size bigint NOT NULL,
+    hash nvarchar(128) DEFAULT NULL NULL,
+    status tinyint NOT NULL,
+    multipart bit NOT NULL,
+    upload_id nvarchar(256) DEFAULT NULL NULL,
+    file_id bigint DEFAULT NULL NULL,
+    expire_time datetime2 NOT NULL,
+    creator nvarchar(64) DEFAULT '' NULL,
+    create_time datetime2 DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updater nvarchar(64) DEFAULT '' NULL,
+    update_time datetime2 DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    deleted bit DEFAULT 0 NOT NULL
+)
+GO
+CREATE INDEX idx_infra_file_upload_task_owner ON infra_file_upload_task (owner_user_id)
+GO
+CREATE INDEX idx_infra_file_upload_task_expire ON infra_file_upload_task (status, expire_time)
+GO
+EXEC sp_addextendedproperty 'MS_Description', N'文件上传任务', 'SCHEMA', N'dbo', 'TABLE', N'infra_file_upload_task'
+GO
+
+DROP TABLE IF EXISTS infra_file_relation
+GO
+CREATE TABLE infra_file_relation (
+    id bigint NOT NULL PRIMARY KEY IDENTITY,
+    file_id bigint NOT NULL,
+    biz_type nvarchar(64) NOT NULL,
+    biz_id nvarchar(64) NOT NULL,
+    creator nvarchar(64) DEFAULT '' NULL,
+    create_time datetime2 DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updater nvarchar(64) DEFAULT '' NULL,
+    update_time datetime2 DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    deleted bit DEFAULT 0 NOT NULL
+)
+GO
+CREATE INDEX idx_infra_file_relation_file ON infra_file_relation (file_id)
+GO
+EXEC sp_addextendedproperty 'MS_Description', N'文件引用', 'SCHEMA', N'dbo', 'TABLE', N'infra_file_relation'
+GO
+
+DROP TABLE IF EXISTS infra_file_operation_log
+GO
+CREATE TABLE infra_file_operation_log (
+    id bigint NOT NULL PRIMARY KEY IDENTITY,
+    task_id bigint DEFAULT NULL NULL,
+    file_id bigint DEFAULT NULL NULL,
+    action nvarchar(32) NOT NULL,
+    success bit NOT NULL,
+    message nvarchar(512) DEFAULT NULL NULL,
+    creator nvarchar(64) DEFAULT '' NULL,
+    create_time datetime2 DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updater nvarchar(64) DEFAULT '' NULL,
+    update_time datetime2 DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    deleted bit DEFAULT 0 NOT NULL
+)
+GO
+CREATE INDEX idx_infra_file_operation_log_task ON infra_file_operation_log (task_id)
+GO
+EXEC sp_addextendedproperty 'MS_Description', N'文件操作日志', 'SCHEMA', N'dbo', 'TABLE', N'infra_file_operation_log'
+GO
+EXEC sp_addextendedproperty 'MS_Description', N'说明，不含密钥和预签名', 'SCHEMA', N'dbo', 'TABLE', N'infra_file_operation_log', 'COLUMN', N'message'
+GO
+
 CREATE TABLE infra_file_config (
     id bigint NOT NULL PRIMARY KEY IDENTITY,
     name nvarchar(63)  NOT NULL,
@@ -1671,6 +1760,8 @@ GO
 INSERT INTO infra_job (id, name, status, handler_name, handler_param, cron_expression, retry_count, retry_interval, monitor_timeout, creator, create_time, updater, update_time, deleted) VALUES (12907, N'CMS 采集任务兜底 Job', 1, N'cmsCollectionDispatchJob', N'', N'0 * * * * ?', 0, 0, 0, N'admin', N'2026-09-04 23:10:54', N'admin', N'2026-09-04 23:10:54', N'0')
 GO
 INSERT INTO infra_job (id, name, status, handler_name, handler_param, cron_expression, retry_count, retry_interval, monitor_timeout, creator, create_time, updater, update_time, deleted) VALUES (12908, N'OA 日程提醒', 1, N'oaScheduleReminderJob', N'', N'0 * * * * ?', 0, 0, 0, N'1', N'2026-09-16 23:12:22', N'1', N'2026-09-16 23:12:22', N'0')
+GO
+INSERT INTO infra_job (id, name, status, handler_name, handler_param, cron_expression, retry_count, retry_interval, monitor_timeout, creator, create_time, updater, update_time, deleted) VALUES (42, N'文件上传清理 Job', 2, N'fileUploadCleanJob', N'', N'0 0/10 * * * ?', 0, 0, 0, N'1', N'2026-11-16 00:00:00', N'1', N'2026-11-16 00:00:00', N'0')
 GO
 SET IDENTITY_INSERT infra_job OFF
 GO
@@ -7045,6 +7136,8 @@ GO
 INSERT INTO system_menu (id, name, permission, type, sort, parent_id, path, icon, component, component_name, status, visible, keep_alive, always_show, creator, create_time, updater, update_time, deleted) VALUES (96, N'文件查询', N'infra:file:query', 3, 1, 95, N'', N'', N'', NULL, 0, N'1', N'1', N'1', N'', N'2021-03-12 20:16:20', N'', N'2026-08-14 01:49:42', N'0')
 GO
 INSERT INTO system_menu (id, name, permission, type, sort, parent_id, path, icon, component, component_name, status, visible, keep_alive, always_show, creator, create_time, updater, update_time, deleted) VALUES (97, N'文件删除', N'infra:file:delete', 3, 4, 95, N'', N'', N'', NULL, 0, N'1', N'1', N'1', N'', N'2021-03-12 20:16:20', N'', N'2026-08-14 01:49:42', N'0')
+INSERT INTO system_menu (id, name, permission, type, sort, parent_id, path, icon, component, component_name, status, visible, keep_alive, always_show, creator, create_time, updater, update_time, deleted) VALUES (14001, N'文件上传', N'infra:file:create', 3, 2, 95, N'', N'', N'', NULL, 0, N'1', N'1', N'1', N'1', N'2026-11-16 00:00:00', N'1', N'2026-11-16 00:00:00', N'0')
+GO
 GO
 INSERT INTO system_menu (id, name, permission, type, sort, parent_id, path, icon, component, component_name, status, visible, keep_alive, always_show, creator, create_time, updater, update_time, deleted) VALUES (98, N'短信管理', N'', 1, 1, 772, N'sms', N'ep:message', NULL, NULL, 0, N'1', N'1', N'1', N'1', N'2021-04-05 01:10:16', N'1', N'2026-08-14 01:49:42', N'0')
 GO

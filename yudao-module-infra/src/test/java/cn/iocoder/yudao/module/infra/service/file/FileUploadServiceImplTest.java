@@ -2,9 +2,11 @@ package cn.iocoder.yudao.module.infra.service.file;
 
 import cn.hutool.core.util.ReflectUtil;
 import cn.iocoder.yudao.framework.common.exception.ServiceException;
+import cn.iocoder.yudao.framework.common.pojo.PageResult;
 import cn.iocoder.yudao.module.infra.controller.admin.file.vo.file.FileUploadCompleteReqVO;
 import cn.iocoder.yudao.module.infra.controller.admin.file.vo.file.FileUploadInitReqVO;
 import cn.iocoder.yudao.module.infra.controller.admin.file.vo.file.FileUploadPartReqVO;
+import cn.iocoder.yudao.module.infra.controller.admin.file.vo.file.FileUploadTaskPageReqVO;
 import cn.iocoder.yudao.module.infra.dal.dataobject.file.FileDO;
 import cn.iocoder.yudao.module.infra.dal.dataobject.file.FileOperationLogDO;
 import cn.iocoder.yudao.module.infra.dal.dataobject.file.FileRelationDO;
@@ -23,6 +25,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static cn.iocoder.yudao.framework.common.exception.enums.GlobalErrorCodeConstants.TOO_MANY_REQUESTS;
 import static cn.iocoder.yudao.module.infra.enums.ErrorCodeConstants.FILE_NOT_EXISTS;
 import static cn.iocoder.yudao.module.infra.enums.ErrorCodeConstants.FILE_PART_ETAG_MISMATCH;
 import static cn.iocoder.yudao.module.infra.enums.ErrorCodeConstants.FILE_REFERENCED;
@@ -56,6 +59,7 @@ public class FileUploadServiceImplTest {
     private FileRelationMapper relationMapper;
     private FileOperationLogMapper operationLogMapper;
     private FileUploadUserProvider userProvider;
+    private FileUploadRateLimiter rateLimiter;
     private FileClient client;
     private final AtomicReference<FileUploadTaskDO> stored = new AtomicReference<>();
 
@@ -68,6 +72,7 @@ public class FileUploadServiceImplTest {
         relationMapper = mock(FileRelationMapper.class);
         operationLogMapper = mock(FileOperationLogMapper.class);
         userProvider = mock(FileUploadUserProvider.class);
+        rateLimiter = mock(FileUploadRateLimiter.class);
         client = mock(FileClient.class);
         ReflectUtil.setFieldValue(service, "fileConfigService", fileConfigService);
         ReflectUtil.setFieldValue(service, "fileMapper", fileMapper);
@@ -75,6 +80,7 @@ public class FileUploadServiceImplTest {
         ReflectUtil.setFieldValue(service, "relationMapper", relationMapper);
         ReflectUtil.setFieldValue(service, "operationLogMapper", operationLogMapper);
         ReflectUtil.setFieldValue(service, "userProvider", userProvider);
+        ReflectUtil.setFieldValue(service, "rateLimiter", rateLimiter);
         ReflectUtil.setFieldValue(service, "multipartThreshold", 50L);
         ReflectUtil.setFieldValue(service, "partSize", 8L);
         ReflectUtil.setFieldValue(service, "maxSize", 1000L);
@@ -110,6 +116,33 @@ public class FileUploadServiceImplTest {
 
         verify(client, never()).createMultipartUpload(anyString(), anyString());
         verify(client).presignPutUrl(anyString(), org.mockito.ArgumentMatchers.eq("image/png"));
+    }
+
+    @Test
+    public void testInit_rateLimitDoesNotSign() {
+        doThrow(new ServiceException(TOO_MANY_REQUESTS)).when(rateLimiter).acquireInit(5L);
+
+        ServiceException ex = assertThrows(ServiceException.class,
+                () -> service.init(req(10L, "photo.png", "image/png")));
+
+        assertEquals(TOO_MANY_REQUESTS.getCode(), ex.getCode());
+        verify(client, never()).presignPutUrl(anyString(), anyString());
+        verify(taskMapper, never()).insert(any(FileUploadTaskDO.class));
+    }
+
+    @Test
+    public void testGetTaskPage_marksPastDueOpenTaskExpired() {
+        FileUploadTaskDO task = openTask(false);
+        task.setName("banner.webp");
+        task.setExpireTime(LocalDateTime.now().minusMinutes(1));
+        when(taskMapper.selectPage(any(FileUploadTaskPageReqVO.class)))
+                .thenReturn(new PageResult<>(List.of(task), 1L));
+
+        var page = service.getTaskPage(new FileUploadTaskPageReqVO());
+
+        assertEquals(1, page.getList().size());
+        assertEquals(4, page.getList().get(0).getStatus());
+        assertEquals("banner.webp", page.getList().get(0).getName());
     }
 
     @Test

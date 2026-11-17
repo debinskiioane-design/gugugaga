@@ -331,7 +331,9 @@ CREATE TABLE infra_file (
     path varchar(512 char)  NOT NULL,
     url varchar(1024 char)  NOT NULL,
     type varchar(128 char) DEFAULT NULL NULL,
-    size int  NOT NULL,
+    size bigint NOT NULL,
+    hash varchar(128 char) DEFAULT NULL NULL,
+    status smallint DEFAULT NULL NULL,
     creator varchar(64 char) DEFAULT '' NULL,
     create_time datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updater varchar(64 char) DEFAULT '' NULL,
@@ -346,12 +348,74 @@ COMMENT ON COLUMN infra_file.path IS '文件路径';
 COMMENT ON COLUMN infra_file.url IS '文件 URL';
 COMMENT ON COLUMN infra_file.type IS '文件类型';
 COMMENT ON COLUMN infra_file.size IS '文件大小';
+COMMENT ON COLUMN infra_file.hash IS '客户端声明的哈希，服务端核对大小和文件头';
+COMMENT ON COLUMN infra_file.status IS '状态，1 正常';
 COMMENT ON COLUMN infra_file.creator IS '创建者';
 COMMENT ON COLUMN infra_file.create_time IS '创建时间';
 COMMENT ON COLUMN infra_file.updater IS '更新者';
 COMMENT ON COLUMN infra_file.update_time IS '更新时间';
 COMMENT ON COLUMN infra_file.deleted IS '是否删除';
 COMMENT ON TABLE infra_file IS '文件表';
+
+CREATE TABLE infra_file_upload_task (
+    id bigint NOT NULL PRIMARY KEY IDENTITY,
+    config_id bigint NOT NULL,
+    owner_user_id bigint NOT NULL,
+    name varchar(256 char) DEFAULT NULL NULL,
+    path varchar(512 char) NOT NULL,
+    type varchar(128 char) DEFAULT NULL NULL,
+    size bigint NOT NULL,
+    hash varchar(128 char) DEFAULT NULL NULL,
+    status smallint NOT NULL,
+    multipart bit NOT NULL,
+    upload_id varchar(256 char) DEFAULT NULL NULL,
+    file_id bigint DEFAULT NULL NULL,
+    expire_time datetime NOT NULL,
+    creator varchar(64 char) DEFAULT '' NULL,
+    create_time datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updater varchar(64 char) DEFAULT '' NULL,
+    update_time datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    deleted bit DEFAULT '0' NOT NULL
+);
+
+CREATE INDEX idx_infra_file_upload_task_owner ON infra_file_upload_task (owner_user_id);
+CREATE INDEX idx_infra_file_upload_task_expire ON infra_file_upload_task (status, expire_time);
+COMMENT ON TABLE infra_file_upload_task IS '文件上传任务';
+COMMENT ON COLUMN infra_file_upload_task.status IS '0 初始化 1 上传中 2 已完成 3 已取消 4 已过期 5 失败';
+
+CREATE TABLE infra_file_relation (
+    id bigint NOT NULL PRIMARY KEY IDENTITY,
+    file_id bigint NOT NULL,
+    biz_type varchar(64 char) NOT NULL,
+    biz_id varchar(64 char) NOT NULL,
+    creator varchar(64 char) DEFAULT '' NULL,
+    create_time datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updater varchar(64 char) DEFAULT '' NULL,
+    update_time datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    deleted bit DEFAULT '0' NOT NULL
+);
+
+CREATE INDEX idx_infra_file_relation_file ON infra_file_relation (file_id);
+COMMENT ON TABLE infra_file_relation IS '文件引用';
+
+CREATE TABLE infra_file_operation_log (
+    id bigint NOT NULL PRIMARY KEY IDENTITY,
+    task_id bigint DEFAULT NULL NULL,
+    file_id bigint DEFAULT NULL NULL,
+    action varchar(32 char) NOT NULL,
+    success bit NOT NULL,
+    message varchar(512 char) DEFAULT NULL NULL,
+    creator varchar(64 char) DEFAULT '' NULL,
+    create_time datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updater varchar(64 char) DEFAULT '' NULL,
+    update_time datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    deleted bit DEFAULT '0' NOT NULL
+);
+
+CREATE INDEX idx_infra_file_operation_log_task ON infra_file_operation_log (task_id);
+COMMENT ON TABLE infra_file_operation_log IS '文件操作日志';
+COMMENT ON COLUMN infra_file_operation_log.message IS '说明，不含密钥和预签名';
+
 -- ----------------------------
 -- Table structure for infra_file_config
 -- ----------------------------
@@ -498,6 +562,7 @@ INSERT INTO infra_job (id, name, status, handler_name, handler_param, cron_expre
 INSERT INTO infra_job (id, name, status, handler_name, handler_param, cron_expression, retry_count, retry_interval, monitor_timeout, creator, create_time, updater, update_time, deleted) VALUES (12906, 'PMS 知识库回收站清理 Job', 1, 'pmsKnowledgeRecycleCleanJob', '', '0 0 2 * * ?', 3, 60000, 0, '1', '2026-08-31 22:15:54', '1', '2026-08-31 22:15:54', '0');
 INSERT INTO infra_job (id, name, status, handler_name, handler_param, cron_expression, retry_count, retry_interval, monitor_timeout, creator, create_time, updater, update_time, deleted) VALUES (12907, 'CMS 采集任务兜底 Job', 1, 'cmsCollectionDispatchJob', '', '0 * * * * ?', 0, 0, 0, 'admin', '2026-09-04 23:10:54', 'admin', '2026-09-04 23:10:54', '0');
 INSERT INTO infra_job (id, name, status, handler_name, handler_param, cron_expression, retry_count, retry_interval, monitor_timeout, creator, create_time, updater, update_time, deleted) VALUES (12908, 'OA 日程提醒', 1, 'oaScheduleReminderJob', '', '0 * * * * ?', 0, 0, 0, '1', '2026-09-16 23:12:22', '1', '2026-09-16 23:12:22', '0');
+INSERT INTO infra_job (id, name, status, handler_name, handler_param, cron_expression, retry_count, retry_interval, monitor_timeout, creator, create_time, updater, update_time, deleted) VALUES (42, '文件上传清理 Job', 2, 'fileUploadCleanJob', '', '0 0/10 * * * ?', 0, 0, 0, '1', '2026-11-16 00:00:00', '1', '2026-11-16 00:00:00', '0');
 COMMIT;
 SET IDENTITY_INSERT infra_job OFF;
 -- @formatter:on
@@ -2920,6 +2985,7 @@ INSERT INTO system_menu (id, name, permission, type, sort, parent_id, path, icon
 INSERT INTO system_menu (id, name, permission, type, sort, parent_id, path, icon, component, component_name, status, visible, keep_alive, always_show, creator, create_time, updater, update_time, deleted) VALUES (95, '文件列表', '', 2, 5, 193, 'file', 'ep:upload-filled', 'infra/file/index', 'InfraFile', 0, '1', '1', '1', '', '2021-03-12 20:16:20', '1', '2026-08-14 01:49:42', '0');
 INSERT INTO system_menu (id, name, permission, type, sort, parent_id, path, icon, component, component_name, status, visible, keep_alive, always_show, creator, create_time, updater, update_time, deleted) VALUES (96, '文件查询', 'infra:file:query', 3, 1, 95, '', '', '', NULL, 0, '1', '1', '1', '', '2021-03-12 20:16:20', '', '2026-08-14 01:49:42', '0');
 INSERT INTO system_menu (id, name, permission, type, sort, parent_id, path, icon, component, component_name, status, visible, keep_alive, always_show, creator, create_time, updater, update_time, deleted) VALUES (97, '文件删除', 'infra:file:delete', 3, 4, 95, '', '', '', NULL, 0, '1', '1', '1', '', '2021-03-12 20:16:20', '', '2026-08-14 01:49:42', '0');
+INSERT INTO system_menu (id, name, permission, type, sort, parent_id, path, icon, component, component_name, status, visible, keep_alive, always_show, creator, create_time, updater, update_time, deleted) VALUES (14001, '文件上传', 'infra:file:create', 3, 2, 95, '', '', '', NULL, 0, '1', '1', '1', '1', '2026-11-16 00:00:00', '1', '2026-11-16 00:00:00', '0');
 INSERT INTO system_menu (id, name, permission, type, sort, parent_id, path, icon, component, component_name, status, visible, keep_alive, always_show, creator, create_time, updater, update_time, deleted) VALUES (98, '短信管理', '', 1, 1, 772, 'sms', 'ep:message', NULL, NULL, 0, '1', '1', '1', '1', '2021-04-05 01:10:16', '1', '2026-08-14 01:49:42', '0');
 INSERT INTO system_menu (id, name, permission, type, sort, parent_id, path, icon, component, component_name, status, visible, keep_alive, always_show, creator, create_time, updater, update_time, deleted) VALUES (99, '短信渠道', '', 2, 0, 98, 'sms-channel', 'fa:stack-exchange', 'system/sms/channel/index', 'SystemSmsChannel', 0, '1', '1', '1', '', '2021-04-01 11:07:15', '1', '2026-08-14 01:49:42', '0');
 INSERT INTO system_menu (id, name, permission, type, sort, parent_id, path, icon, component, component_name, status, visible, keep_alive, always_show, creator, create_time, updater, update_time, deleted) VALUES (100, '短信渠道查询', 'system:sms-channel:query', 3, 1, 99, '', '', '', NULL, 0, '1', '1', '1', '', '2021-04-01 11:07:15', '', '2026-08-14 01:49:42', '0');
