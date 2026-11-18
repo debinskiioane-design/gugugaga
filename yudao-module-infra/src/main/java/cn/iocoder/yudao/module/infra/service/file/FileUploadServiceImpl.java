@@ -1,6 +1,7 @@
 package cn.iocoder.yudao.module.infra.service.file;
 
 import cn.iocoder.yudao.framework.common.exception.ServiceException;
+import cn.iocoder.yudao.framework.common.pojo.PageResult;
 import cn.hutool.core.date.LocalDateTimeUtil;
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.lang.Assert;
@@ -11,6 +12,8 @@ import cn.iocoder.yudao.module.infra.controller.admin.file.vo.file.FileUploadIni
 import cn.iocoder.yudao.module.infra.controller.admin.file.vo.file.FileUploadInitRespVO;
 import cn.iocoder.yudao.module.infra.controller.admin.file.vo.file.FileUploadPartReqVO;
 import cn.iocoder.yudao.module.infra.controller.admin.file.vo.file.FileUploadPartRespVO;
+import cn.iocoder.yudao.module.infra.controller.admin.file.vo.file.FileUploadTaskPageReqVO;
+import cn.iocoder.yudao.module.infra.controller.admin.file.vo.file.FileUploadTaskPageRespVO;
 import cn.iocoder.yudao.module.infra.controller.admin.file.vo.file.FileUploadTaskRespVO;
 import cn.iocoder.yudao.module.infra.dal.dataobject.file.FileDO;
 import cn.iocoder.yudao.module.infra.dal.dataobject.file.FileOperationLogDO;
@@ -104,6 +107,8 @@ public class FileUploadServiceImpl implements FileUploadService {
     private FileOperationLogMapper operationLogMapper;
     @Resource
     private FileUploadUserProvider userProvider;
+    @Resource
+    private FileUploadRateLimiter rateLimiter;
 
     @Value("${yudao.file.upload.multipart-threshold:52428800}")
     private long multipartThreshold;
@@ -116,6 +121,7 @@ public class FileUploadServiceImpl implements FileUploadService {
 
     @Override
     public FileUploadInitRespVO init(FileUploadInitReqVO reqVO) {
+        Long userId = userProvider.getUserId();
         String name = FilePathUtils.validateFileName(reqVO.getName());
         FilePathUtils.validateDirectory(reqVO.getDirectory());
         if (reqVO.getSize() == null || reqVO.getSize() < 1) {
@@ -130,6 +136,7 @@ public class FileUploadServiceImpl implements FileUploadService {
             throw exception(FILE_TYPE_NOT_ALLOWED);
         }
 
+        rateLimiter.acquireInit(userId);
         FileClient client = masterClient();
         String path = randomPath(name, reqVO.getDirectory());
         boolean multipart = reqVO.getSize() >= multipartThreshold;
@@ -143,7 +150,7 @@ public class FileUploadServiceImpl implements FileUploadService {
 
         FileUploadTaskDO task = new FileUploadTaskDO();
         task.setConfigId(client.getId());
-        task.setOwnerUserId(userProvider.getUserId());
+        task.setOwnerUserId(userId);
         task.setName(name);
         task.setPath(path);
         task.setType(signedType);
@@ -170,6 +177,7 @@ public class FileUploadServiceImpl implements FileUploadService {
     @Override
     public List<FileUploadPartRespVO> partUrls(FileUploadPartReqVO reqVO) {
         FileUploadTaskDO task = requireActive(reqVO.getTaskId());
+        rateLimiter.acquirePartUrl(task.getOwnerUserId());
         if (!Boolean.TRUE.equals(task.getMultipart())) {
             throw exception(FILE_UPLOAD_TASK_STATE);
         }
@@ -216,6 +224,27 @@ public class FileUploadServiceImpl implements FileUploadService {
         }
         resp.setParts(parts);
         return resp;
+    }
+
+    @Override
+    public PageResult<FileUploadTaskPageRespVO> getTaskPage(FileUploadTaskPageReqVO reqVO) {
+        PageResult<FileUploadTaskDO> page = taskMapper.selectPage(reqVO);
+        List<FileUploadTaskPageRespVO> list = new ArrayList<>();
+        List<FileUploadTaskDO> rows = page.getList() == null ? List.of() : page.getList();
+        for (FileUploadTaskDO task : rows) {
+            FileUploadTaskPageRespVO row = new FileUploadTaskPageRespVO();
+            row.setId(task.getId());
+            row.setName(task.getName());
+            row.setStatus(displayStatus(task));
+            row.setSize(task.getSize());
+            row.setMultipart(task.getMultipart());
+            row.setFileId(task.getFileId());
+            row.setOwnerUserId(task.getOwnerUserId());
+            row.setExpireTime(task.getExpireTime());
+            row.setCreateTime(task.getCreateTime());
+            list.add(row);
+        }
+        return new PageResult<>(list, page.getTotal());
     }
 
     @Override

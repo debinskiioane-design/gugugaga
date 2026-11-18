@@ -108,6 +108,30 @@ export const getUploadPartUrls = (taskId: number, partNumbers: number[]) => {
   })
 }
 
+export interface FileUploadTaskPageReqVO extends PageParam {
+  name?: string
+  status?: number
+}
+
+export interface FileUploadTaskPageRespVO {
+  id: number
+  name?: string
+  status: number
+  size: number
+  multipart: boolean
+  fileId?: number
+  ownerUserId?: number
+  expireTime?: string
+  createTime?: string
+}
+
+export const getUploadTaskPage = (params: FileUploadTaskPageReqVO) => {
+  return request.get<{ list: FileUploadTaskPageRespVO[]; total: number }>({
+    url: '/infra/file/upload-task/page',
+    params
+  })
+}
+
 export const getUploadTask = (id: number) => {
   return request.get<FileUploadTaskRespVO>({ url: '/infra/file/upload-task/get', params: { id } })
 }
